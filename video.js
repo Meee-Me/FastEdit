@@ -18,7 +18,7 @@
   const NAMES = { text: "Text", frame: "Frame", light_leak: "Light leak", glow: "Glow", flare: "Lens flare", stars: "Stars", birds: "Birds", sparkles: "Sparkles", snow: "Snow", rain: "Rain", bokeh: "Bokeh", confetti: "Confetti", hearts: "Hearts", moon: "Moon", sunset_stripes: "Retro sun", clouds: "Clouds", abstract: "Abstract art" };
 
   /* ================= state ================= */
-  const V = { media: [], clips: [], overlays: [], adj: { ...DEF }, ratio: "original", follow: false, frame: { x: 0.5, y: 0.5 }, muted: false, volume: 1, fadeIn: 0, fadeOut: 0, grade: 0, sel: null, selOv: null };
+  const V = { media: [], clips: [], overlays: [], adj: { ...DEF }, ratio: "original", follow: false, frame: { x: 0.5, y: 0.5 }, muted: false, volume: 1, fadeIn: 0, fadeOut: 0, grade: 0, sel: null, selOv: null, sfx: { level: false, hum: false, voice: false, bass: false } };
   let uid = 1, started = false, PW = 960, PH = 540;
   const view = $("#vCanvas"), pctx = view.getContext("2d", { willReadFrequently: true });
 
@@ -37,9 +37,9 @@
 
   /* ================= undo ================= */
   const undoS = [], redoS = [];
-  const snap = () => ({ clips: V.clips.map((c) => ({ ...c })), overlays: V.overlays.map((o) => ({ ...o })), adj: { ...V.adj }, ratio: V.ratio, follow: V.follow, frame: { ...V.frame }, muted: V.muted, volume: V.volume, fadeIn: V.fadeIn, fadeOut: V.fadeOut, grade: V.grade, sel: V.sel, selOv: V.selOv });
+  const snap = () => ({ clips: V.clips.map((c) => ({ ...c })), overlays: V.overlays.map((o) => ({ ...o })), adj: { ...V.adj }, ratio: V.ratio, follow: V.follow, frame: { ...V.frame }, muted: V.muted, volume: V.volume, fadeIn: V.fadeIn, fadeOut: V.fadeOut, grade: V.grade, sel: V.sel, selOv: V.selOv, sfx: { ...V.sfx } });
   function pushUndo() { undoS.push(snap()); if (undoS.length > 40) undoS.shift(); redoS.length = 0; updUndo(); }
-  function restore(s) { Object.assign(V, s); applyVolume(); resize(); refreshAll(); seek(Math.min(P.t, total())); }
+  function restore(s) { Object.assign(V, s); applyVolume(); rebuildAll(); resize(); refreshAll(); seek(Math.min(P.t, total())); }
   function undo() { if (!undoS.length) return; redoS.push(snap()); restore(undoS.pop()); updUndo(); }
   function redo() { if (!redoS.length) return; undoS.push(snap()); restore(redoS.pop()); updUndo(); }
   function updUndo() { $("#vUndo").disabled = !undoS.length; $("#vRedo").disabled = !redoS.length; }
@@ -130,9 +130,119 @@
   }
   function connectMedia(m) {
     if (m.kind !== "video" || m.node || !AC) return;
-    try { m.node = AC.createMediaElementSource(m.el); m.gain = AC.createGain(); m.node.connect(m.gain); m.gain.connect(monitor); m.gain.connect(recDest); } catch {}
+    try { m.node = AC.createMediaElementSource(m.el); m.gain = AC.createGain(); m.gain.connect(monitor); m.gain.connect(recDest); rebuildChain(m); } catch {}
   }
+  // source -> [low cut] -> [hum notches] -> [voice EQ] -> [bass] -> [compressor + level gain] -> volume
+  function rebuildChain(m) {
+    if (!m.node || !AC) return;
+    try { m.node.disconnect(); } catch {}
+    for (const n of m.fx || []) { try { n.disconnect(); } catch {} }
+    const fx = [], f = V.sfx, a = m.audio && !m.audio.none ? m.audio : null;
+    const biquad = (type, freq, q, gain) => { const n = AC.createBiquadFilter(); n.type = type; n.frequency.value = freq; if (q != null) n.Q.value = q; if (gain != null) n.gain.value = gain; return n; };
+    if (f.hum || f.voice) fx.push(biquad("highpass", f.hum ? 85 : 70, 0.7));
+    if (f.hum) for (const hz of a && a.hum ? [a.hum, a.hum * 2, a.hum * 3] : [50, 60, 100, 120]) fx.push(biquad("notch", hz, 30));
+    if (f.voice) { fx.push(biquad("lowshelf", 200, null, -3)); fx.push(biquad("peaking", 3000, 0.9, 5)); }
+    if (f.bass) fx.push(biquad("lowshelf", 120, null, 7));
+    if (f.level) {
+      const c = AC.createDynamicsCompressor(); c.threshold.value = -26; c.knee.value = 12; c.ratio.value = 4; c.attack.value = 0.005; c.release.value = 0.25; fx.push(c);
+      const g = AC.createGain(); g.gain.value = a ? a.norm : 1.5; fx.push(g);
+    }
+    let prev = m.node; for (const n of fx) { prev.connect(n); prev = n; } prev.connect(m.gain);
+    m.fx = fx;
+  }
+  function rebuildAll() { for (const m of V.media) rebuildChain(m); }
   function applyVolume() { const v = V.muted ? 0 : V.volume; for (const m of V.media) { if (m.gain) m.gain.gain.value = v; else if (m.el) { m.el.muted = V.muted; m.el.volume = clamp(V.volume, 0, 1); } } }
+
+  /* ================= sound analysis ================= */
+  // Decodes a clip's soundtrack once and keeps only a loudness curve (20 per second),
+  // the hum frequency if there is one, and the gain that brings speech to a steady level.
+  async function analyzeAudio(m) {
+    if (m.audio) return m.audio;
+    if (m.kind !== "video") return (m.audio = { none: true });
+    try {
+      const buf = await (await fetch(m.url)).arrayBuffer();
+      if (buf.byteLength > 500e6) return (m.audio = { none: true, tooBig: true });
+      const OC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      const RATE = 22050, ab = await new OC(1, 1, RATE).decodeAudioData(buf);
+      const n = ab.length, ch = ab.numberOfChannels, mono = new Float32Array(n);
+      for (let c = 0; c < ch; c++) { const d = ab.getChannelData(c); for (let i = 0; i < n; i++) mono[i] += d[i] / ch; }
+      const sr = ab.sampleRate, hop = Math.round(sr / 20), W = Math.ceil(n / hop), db = new Float32Array(W);
+      for (let w = 0; w < W; w++) { let e = 0; const a = w * hop, b = Math.min(n, a + hop); for (let i = a; i < b; i++) e += mono[i] * mono[i]; db[w] = 10 * Math.log10(e / Math.max(1, b - a) + 1e-10); }
+      // hum: Goertzel power at mains frequencies vs their neighbours
+      const len = Math.min(n, sr * 20), power = (hz) => { const k = 2 * Math.cos((2 * Math.PI * hz) / sr); let s1 = 0, s2 = 0; for (let i = 0; i < len; i++) { const s0 = mono[i] + k * s1 - s2; s2 = s1; s1 = s0; } return s1 * s1 + s2 * s2 - k * s1 * s2; };
+      const r50 = power(50) / ((power(42) + power(56)) / 2 + 1e-12), r60 = power(60) / ((power(54) + power(68)) / 2 + 1e-12);
+      const hum = Math.max(r50, r60) > 6 ? (r50 > r60 ? 50 : 60) : null;
+      const sorted = [...db].filter((v) => v > -70).sort((x, y) => x - y);
+      const loud = sorted.length ? sorted[Math.floor(sorted.length * 0.8)] : -70;
+      return (m.audio = { rate: 20, db, hum, loud, has: sorted.length > 0 && sorted[sorted.length - 1] > -50, norm: clamp(Math.pow(10, (-16 - loud) / 20), 0.6, 6) });
+    } catch (e) { return (m.audio = { none: true }); }
+  }
+  async function analyzeAllAudio(progress) { const list = usedMedia(); let i = 0; for (const m of list) { await analyzeAudio(m); progress && progress(++i / list.length); } rebuildAll(); }
+  const hasSound = () => usedMedia().some((m) => m.audio && !m.audio.none && m.audio.has);
+  // Quiet stretches in a clip's own time, shrunk by a little padding so words aren't clipped.
+  function silentRanges(m, minLen) {
+    const a = m.audio; if (!a || a.none || !a.has) return [];
+    const s = [...a.db].sort((x, y) => x - y), p10 = s[Math.floor(s.length * 0.1)], p90 = s[Math.floor(s.length * 0.9)];
+    if (p90 - p10 < 10) return [];
+    const thr = Math.max(-58, Math.min(p10 + (p90 - p10) * 0.3, p90 - 15)), pad = 0.12, out = [];
+    let start = -1;
+    for (let w = 0; w <= a.db.length; w++) {
+      const quiet = w < a.db.length && a.db[w] < thr;
+      if (quiet && start < 0) start = w;
+      if (!quiet && start >= 0) { const t0 = start / a.rate, t1 = w / a.rate; if (t1 - t0 >= minLen) out.push({ a: t0 + pad, b: t1 - pad }); start = -1; }
+    }
+    return out;
+  }
+  async function removeSilence(long) {
+    await analyzeAllAudio((p) => ($("#vBusyText").textContent = `Listening to the sound… ${Math.round(p * 100)}%`));
+    if (!hasSound()) return { cut: 0, msg: "found no sound to listen to, so nothing was removed" };
+    const cuts = []; let st = 0;
+    for (const c of V.clips) {
+      for (const r of silentRanges(mediaOf(c), long ? 1.0 : 0.55)) {
+        const a = Math.max(r.a, c.in), b = Math.min(r.b, c.out);
+        if (b - a >= 0.2) cuts.push([st + (a - c.in) / c.speed, st + (b - c.in) / c.speed]);
+      }
+      st += clipLen(c);
+    }
+    const T = total(), removed = cuts.reduce((x, [a, b]) => x + b - a, 0);
+    if (!cuts.length) return { cut: 0, msg: "listened for silent parts and found none" };
+    if (T - removed < 0.5) return { cut: 0, msg: "found almost nothing but silence, so I left it alone" };
+    cuts.sort((x, y) => y[0] - x[0]).forEach(([a, b]) => cutRange(a, b));
+    return { cut: removed, msg: `removed ${cuts.length} silent part${cuts.length > 1 ? "s" : ""} (${short(removed)}), now ${short(total())} long` };
+  }
+
+  /* ================= smart shortening ================= */
+  // Scores short windows by movement, sound and colour and keeps the best ones in order.
+  async function bestParts(target, progress) {
+    const T = total();
+    target = clamp(target || Math.min(15, T * 0.5), 1, T);
+    if (target >= T - 0.3) return `it's already ${short(T)}, so nothing needed cutting`;
+    await analyzeAllAudio();
+    const win = clamp(target / 6, 0.75, 3), n = Math.ceil(T / win), rows = [];
+    for (let i = 0; i < n; i++) {
+      const t0 = i * win, t1 = Math.min(T, t0 + win), mid = (t0 + t1) / 2, at = clipAt(mid), m = mediaOf(at.clip);
+      const lt = at.clip.in + (mid - at.start) * at.clip.speed, d = 0.15 * at.clip.speed;
+      const fa = await frameOf(m, clamp(lt - d, 0, m.duration - 0.05), 64), fb = await frameOf(m, clamp(lt + d, 0, m.duration - 0.05), 64);
+      const A = fa.getContext("2d").getImageData(0, 0, fa.width, fa.height).data, B = fb.getContext("2d").getImageData(0, 0, fb.width, fb.height).data;
+      let motion = 0, lum = 0, sat = 0, lsq = 0; const px = B.length / 4;
+      for (let k = 0; k < B.length; k += 4) { const la = 0.2126 * A[k] + 0.7152 * A[k + 1] + 0.0722 * A[k + 2], lb = 0.2126 * B[k] + 0.7152 * B[k + 1] + 0.0722 * B[k + 2]; motion += Math.abs(la - lb); lum += lb; lsq += lb * lb; const mx = Math.max(B[k], B[k + 1], B[k + 2]), mn = Math.min(B[k], B[k + 1], B[k + 2]); sat += mx ? (mx - mn) / mx : 0; }
+      lum /= px; const contrast = Math.sqrt(Math.max(0, lsq / px - lum * lum));
+      let sound = null; const a = m.audio;
+      if (a && !a.none && a.has) { const la = at.clip.in + (t0 - at.start) * at.clip.speed, lb = at.clip.in + (t1 - at.start) * at.clip.speed; let e = 0, c = 0; for (let w = Math.floor(la * a.rate); w < Math.ceil(lb * a.rate) && w < a.db.length; w++) { e += a.db[w]; c++; } sound = c ? e / c : null; }
+      rows.push({ t0, t1, motion: motion / px, look: sat / px + contrast / 128, sound, dark: lum < 20 });
+      progress && progress((i + 1) / n);
+    }
+    const norm = (key) => { const v = rows.map((r) => r[key]).filter((x) => x != null), lo = Math.min(...v), hi = Math.max(...v); for (const r of rows) r[key + "N"] = r[key] == null || hi - lo < 1e-6 ? 0.5 : (r[key] - lo) / (hi - lo); };
+    norm("motion"); norm("look"); norm("sound");
+    const withSound = rows.some((r) => r.sound != null);
+    for (const r of rows) r.score = (withSound ? 0.45 * r.motionN + 0.35 * r.soundN + 0.2 * r.lookN : 0.65 * r.motionN + 0.35 * r.lookN) - (r.dark ? 0.3 : 0);
+    const pick = [...rows].sort((x, y) => y.score - x.score), keep = new Set(); let kept = 0;
+    for (const r of pick) { if (kept >= target - 0.05) break; keep.add(r); kept += r.t1 - r.t0; }
+    const drop = rows.filter((r) => !keep.has(r));
+    drop.sort((x, y) => y.t0 - x.t0).forEach((r) => cutRange(r.t0, r.t1));
+    let runs = 0, prev = false; for (const r of rows) { const k = keep.has(r); if (k && !prev) runs++; prev = k; }
+    return `shortened it to the best ${short(total())} (${runs} moment${runs > 1 ? "s" : ""} with the most ${withSound ? "movement and sound" : "movement"})`;
+  }
 
   /* ================= pixels ================= */
   const pixCache = { key: "", vig: null, noise: null };
@@ -403,6 +513,8 @@
     $("#vPosRow").hidden = V.follow;
     $("#vMute").checked = V.muted; $("#vVol").value = Math.round(V.volume * 100); $("#vVolV").textContent = Math.round(V.volume * 100) + "%";
     $("#vFadeIn").value = V.fadeIn; $("#vFadeOut").value = V.fadeOut;
+    for (const k of ["level", "hum", "voice", "bass"]) $("#vSfx-" + k).checked = !!V.sfx[k];
+    soundInfo();
   }
   function syncAdj() {
     for (const k of Object.keys(DEF)) { const inp = $("#vadj-" + k), out = $("#vadjv-" + k); if (!inp) continue; inp.value = V.adj[k] || 0; out.textContent = FE.fmtAdj(k, V.adj[k] || 0); out.classList.toggle("on", !!V.adj[k]); }
@@ -471,6 +583,30 @@
   for (const id of ["#vPosX", "#vPosY"]) $(id).addEventListener("input", () => { if (Date.now() - posUndo > 800) pushUndo(); posUndo = Date.now(); V.frame = { x: $("#vPosX").value / 100, y: $("#vPosY").value / 100 }; redrawSoon(); });
   $("#vMute").onchange = () => { pushUndo(); V.muted = $("#vMute").checked; applyVolume(); };
   $("#vVol").addEventListener("input", () => { V.volume = $("#vVol").value / 100; $("#vVolV").textContent = $("#vVol").value + "%"; applyVolume(); });
+  for (const k of ["level", "hum", "voice", "bass"]) $("#vSfx-" + k).onchange = async (e) => {
+    pushUndo(); ensureAudio(); V.sfx = { ...V.sfx, [k]: e.target.checked };
+    if (e.target.checked) { busy(true, "Listening to the sound…"); await analyzeAllAudio(); busy(false); }
+    rebuildAll(); soundInfo();
+  };
+  function soundInfo() {
+    const list = usedMedia(), heard = list.filter((m) => m.audio);
+    let t = "Play to hear the changes. They're included when you export.";
+    if (heard.length && !hasSound()) t = "This video has no sound.";
+    else { const hum = heard.map((m) => m.audio.hum).find(Boolean); if (V.sfx.hum && hum) t = `Found ${hum} Hz hum and filtered it out. ` + t; }
+    $("#vSoundInfo").textContent = t;
+  }
+  $("#vSilence").onclick = async () => {
+    pause(); ensureAudio(); pushUndo(); busy(true, "Listening to the sound…");
+    const r = await removeSilence($("#vSilenceLong").checked); busy(false);
+    if (!r.cut) { undoS.pop(); updUndo(); }
+    refreshAll(); seek(Math.min(P.t, total())); soundInfo(); FE.toast(titleCase(r.msg));
+  };
+  $("#vBest").onclick = async () => {
+    const target = +$("#vBestLen").value; if (!(target > 0)) return FE.toast("Enter how many seconds to keep");
+    pause(); pushUndo(); busy(true, "Finding the best moments… 0%");
+    const msg = await bestParts(target, (p) => ($("#vBusyText").textContent = `Finding the best moments… ${Math.round(p * 100)}%`)); busy(false);
+    refreshAll(); seek(0); FE.toast(titleCase(msg));
+  };
   $("#vFadeIn").onchange = () => { pushUndo(); V.fadeIn = clamp(+$("#vFadeIn").value || 0, 0, total() / 2); syncEdit(); redrawSoon(); };
   $("#vFadeOut").onchange = () => { pushUndo(); V.fadeOut = clamp(+$("#vFadeOut").value || 0, 0, total() / 2); syncEdit(); redrawSoon(); };
   function frameAnalysis() { const c = mk(PW, PH); renderFrame(c.getContext("2d"), PW, PH, P.t, { noOverlays: true }); return AI.analyze(c); }
@@ -562,7 +698,7 @@
   /* ================= AI ================= */
   let vMode = "edit";
   const VCHIPS = {
-    edit: ["Cinematic and vertical for TikTok", "Trim the first 2 seconds", "Slow motion", "Speed up 2x", "Fade in and fade out", "Split at scene changes", "Warmer with a vignette", "Black and white", "Mute the audio"],
+    edit: ["Make it 15 seconds with the best parts", "Remove the silent parts", "Clean up the audio and even out the volume", "Cinematic and vertical for TikTok", "Trim the first 2 seconds", "Slow motion", "Speed up 2x", "Fade in and fade out", "Split at scene changes", "Make voices clearer", "Mute the audio"],
     art: ["Falling snow", "Rain", "Confetti", "Sparkles around the light", "Bokeh lights", "Floating hearts", "Add a caption", "Stars and a crescent moon", "Light leak"],
     critique: ["Critique this frame"],
   };
@@ -606,7 +742,8 @@
     if (plan.understood.some((u) => u.intent === "cinematic")) notes.push("applied a cinematic grade");
     const A = AI.analyze(frameCanvasNoOverlays());
     // timeline operations first, so overlays span the final length
-    for (const op of plan.video) {
+    const ops = plan.video.filter((op, i, all) => op.op !== "best" || all.findIndex((o) => o.op === "best") === i);
+    for (const op of ops) {
       const T = total();
       if (op.op === "trim_start") { const s = Math.min(op.s, T - 0.2); if (s > 0) { cutRange(0, s); extra.push(`trimmed the first ${short(s)}`); } }
       else if (op.op === "trim_end") { const s = Math.min(op.s, T - 0.2); if (s > 0) { cutRange(T - s, T); extra.push(`trimmed the last ${short(s)}`); } }
@@ -619,6 +756,21 @@
       else if (op.op === "ratio") { V.ratio = Math.abs(op.ar - baseAspect()) < 0.01 ? "original" : op.ar; resize(); extra.push(`reframed to ${op.ar === 1 ? "square" : op.ar < 1 ? "vertical " + (Math.abs(op.ar - 9 / 16) < 0.01 ? "9:16" : op.ar.toFixed(2) + ":1") : Math.abs(op.ar - 16 / 9) < 0.01 ? "16:9" : op.ar.toFixed(2) + ":1"}`); }
       else if (op.op === "follow") { V.follow = true; await runTracks(); extra.push("set the frame to follow the subject"); }
       else if (op.op === "scenes") extra.push(await runScenes(true));
+      else if (op.op === "keep_last") { const s = Math.min(op.s, T - 0.2); cutRange(0, T - s); extra.push(`kept the last ${short(s)}`); }
+      else if (op.op === "best") { busy(true, "Finding the best moments… 0%"); extra.push(await bestParts(op.target, (p) => ($("#vBusyText").textContent = `Finding the best moments… ${Math.round(p * 100)}%`))); busy(false); }
+      else if (op.op === "silence") { busy(true, "Listening to the sound…"); const r = await removeSilence(op.long); busy(false); extra.push(r.msg); }
+      else if (op.op === "sfx" || op.op === "sfx_reset") {
+        ensureAudio(); await analyzeAllAudio();
+        if (op.op === "sfx_reset") { V.sfx = { level: false, hum: false, voice: false, bass: false }; extra.push("removed the sound effects"); }
+        else {
+          V.sfx = { ...V.sfx, [op.key]: true };
+          const humHz = usedMedia().map((m) => m.audio && m.audio.hum).find(Boolean);
+          extra.push({ level: "evened out the loudness", hum: humHz ? `filtered out ${humHz} Hz hum and low rumble` : "cut low rumble (no mains hum found)", voice: "made voices clearer", bass: "boosted the bass" }[op.key]);
+        }
+        rebuildAll();
+        if (!hasSound()) extra.push("this video has no sound yet, so you'll hear the change once you add one that does");
+      }
+      else if (op.op === "volume") { V.volume = clamp(Math.round((V.volume + op.d) * 100) / 100, 0, 2); V.muted = false; applyVolume(); extra.push(`set the volume to ${Math.round(V.volume * 100)}%`); }
     }
     for (const job of plan.jobs) {
       if (job.kind === "split_tone") { V.grade = 0.6; continue; }

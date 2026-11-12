@@ -66,7 +66,7 @@
   const INTENTS = {
     auto_enhance: ["auto enhance", "enhance", "make it look better", "improve this photo", "fix it", "auto fix", "make this look professional", "auto adjust", "optimize the photo", "improve", "fix the photo", "make it nicer", "touch it up", "polish it", "make it look good", "one click fix", "best look", "make it better"],
     brighten: ["brighter", "brighten", "more light", "lighten it", "increase exposure", "too dark", "make it lighter", "raise exposure", "more exposure", "brighten the image", "it is too dark", "boost brightness", "lighter", "less dark", "underexposed", "light it up"],
-    darken: ["darker", "darken", "too bright", "less light", "lower exposure", "reduce brightness", "decrease exposure", "make it darker", "dim it", "less exposure", "overexposed", "less bright", "tone it down darker"],
+    darken: ["turn the brightness down", "brightness down", "lower the brightness", "less brightness", "darker", "darken", "too bright", "less light", "lower exposure", "reduce brightness", "decrease exposure", "make it darker", "dim it", "less exposure", "overexposed", "less bright", "tone it down darker"],
     contrast_up: ["more contrast", "increase contrast", "punchier", "add contrast", "boost contrast", "higher contrast", "make it punchy", "crisper tones", "stronger contrast", "deeper blacks", "contrast", "pop", "make it pop", "high contrast"],
     contrast_down: ["less contrast", "lower contrast", "reduce contrast", "flatter", "softer contrast", "decrease contrast", "too harsh", "flat look", "low contrast", "softer tones"],
     warmer: ["warmer", "warm it up", "more warm", "add warmth", "warmer tones", "more orange", "more yellow", "too cold", "too blue", "heat it up", "warm", "cozy tones", "less cool", "warm colors", "warmth", "sunnier colors"],
@@ -75,7 +75,7 @@
     desaturate: ["less saturation", "desaturate", "muted colors", "less colorful", "tone down colors", "washed out look", "reduce saturation", "subtle colors", "pastel", "less color", "muted", "dull the colors", "soft colors"],
     black_white: ["blackwhite", "monochrome", "grayscale", "greyscale", "blackwhite photo", "no color", "bw", "noir", "mono", "remove all color", "colorless", "blackwhite high contrast"],
     sepia: ["sepia", "old photo", "antique", "aged photo", "old fashioned", "brown tone", "historic look", "1900s photo", "sepia tone"],
-    vintage: ["vintage", "retro", "film look", "analog", "faded film", "70s look", "nostalgic", "film photo", "old film", "faded", "retro film", "warm film", "analog film look", "matte look"],
+    vintage: ["film vibe", "give it a film look", "old school film", "vintage", "retro", "film look", "analog", "faded film", "70s look", "nostalgic", "film photo", "old film", "faded", "retro film", "warm film", "analog film look", "matte look"],
     cinematic: ["cinematic", "movie look", "tealorange", "film grade", "hollywood look", "blockbuster", "cinema", "color grade like a movie", "cinematic grade", "movie still"],
     moody: ["moody", "dramatic", "dark and moody", "atmospheric", "gloomy", "intense mood", "brooding", "drama", "stormy mood", "dark mood", "mysterious"],
     golden_hour: ["golden hour", "sunset glow", "golden light", "sunny glow", "warm glow", "evening light", "magic hour", "golden", "sun glow", "golden hour glow", "warm sunlight"],
@@ -86,7 +86,7 @@
     sharpen: ["sharpen", "sharper", "more detail", "crisp", "crisper", "clarity", "more defined", "in focus", "enhance details", "sharp", "make it sharp", "detail"],
     soften: ["blur", "soften", "softer", "soft focus", "blurry", "smooth it", "haze", "gaussian blur", "blur it", "out of focus", "make it soft"],
     shadows_up: ["lift shadows", "brighten shadows", "open shadows", "more shadow detail", "shadows brighter", "raise shadows", "recover shadows", "lift the shadows", "see into the shadows"],
-    highlights_down: ["recover highlights", "tone down highlights", "less highlights", "reduce highlights", "blown out", "highlights too bright", "save the sky", "bring back sky", "lower highlights", "the sky is too bright"],
+    highlights_down: ["highlights down", "pull back the highlights", "recover highlights", "tone down highlights", "less highlights", "reduce highlights", "blown out", "highlights too bright", "save the sky", "bring back sky", "lower highlights", "the sky is too bright"],
     fix_color: ["white balance", "fix colors", "color cast", "neutral colors", "correct colors", "remove tint", "fix white balance", "colors look off", "auto color", "balance colors", "fix the color", "too green", "realistic colors", "natural colors"],
     crop_smart: ["crop", "better composition", "crop it", "recompose", "crop to subject", "tighter crop", "zoom in on subject", "rule of thirds", "stronger composition", "improve framing", "reframe", "crop to a stronger composition", "fix composition", "smart crop"],
     crop_ratio: ["vertical for tiktok", "make it vertical", "for instagram reels", "youtube shorts format", "tiktok format", "for my story", "make it widescreen", "reel format", "square", "make it square", "instagram square", "portrait crop", "crop to 4 5", "story format", "widescreen", "crop 16 9", "landscape crop", "vertical crop", "crop to ratio", "9 16", "cinema crop", "1 1", "3 2 crop", "phone wallpaper"],
@@ -108,7 +108,7 @@
     moon: ["moon", "add a moon", "crescent moon", "full moon", "moonlight", "lunar", "a moon in the sky"],
     sunset_stripes: ["sunset stripes", "retro stripes", "70s stripes", "rainbow stripes", "stripes overlay", "retro sunset", "synthwave", "vaporwave", "outrun", "stripes", "retro sun"],
     clouds: ["clouds", "add clouds", "fluffy clouds", "cloudy sky", "mist", "fog", "foggy", "misty", "haze over the horizon", "low fog"],
-    remove_bg: ["remove background", "remove the background", "cut out", "background removal", "transparent background", "isolate subject", "delete background", "erase background", "cutout", "extract subject", "no background", "remove bg"],
+    remove_bg: ["remove the backround", "remove backround", "background remover", "make the background transparent", "take out the background", "remove background", "remove the background", "cut out", "background removal", "transparent background", "isolate subject", "delete background", "erase background", "cutout", "extract subject", "no background", "remove bg"],
     reset: ["reset", "start over", "undo everything", "remove all edits", "original look", "clear adjustments", "revert", "go back to original", "reset adjustments"],
     critique: ["critique", "feedback", "what do you think", "review my photo", "how can i improve", "rate it", "analyze", "suggestions", "any tips", "is it good", "rate my photo", "critique this image", "give me feedback"],
     trim_start: ["trim the first 3 seconds", "cut the first 2 seconds", "remove the beginning", "cut the intro", "trim the start", "skip the first 5 seconds", "start later", "remove the first second", "trim the beginning by 2 seconds", "cut off the start", "delete the first 4 seconds"],
@@ -123,6 +123,15 @@
     fade_in: ["fade in", "fade from black", "start with a fade", "fade in at the start", "open with a fade", "fade in from black"],
     fade_out: ["fade out", "fade to black", "end with a fade", "fade out at the end", "close with a fade", "fade out to black"],
     reframe: ["follow the subject", "track the subject", "keep the subject centered", "auto reframe", "smart reframe", "keep them in frame", "reframe", "center the subject", "follow the action", "track the person"],
+    remove_silence: ["remove the silent parts", "cut the silences", "remove pauses", "cut out the dead air", "remove silence", "trim the quiet parts", "jump cut the pauses", "cut the gaps where nobody talks", "delete the silent bits", "remove the long pauses", "cut out the awkward pauses", "skip the silent moments"],
+    level_audio: ["even out the volume", "normalize the audio", "make the sound consistent", "balance the loudness", "level the audio", "fix uneven volume", "compress the audio", "make quiet parts louder", "even out loud and quiet parts", "consistent volume", "loudness normalization"],
+    reduce_hum: ["reduce the noise in the audio", "noisy audio", "the audio is noisy", "remove the hum", "reduce background noise", "clean up the audio", "remove buzz", "reduce hiss", "fix the hum", "get rid of the rumble", "remove electrical hum", "less background noise", "denoise the audio", "remove the wind rumble", "clean the sound", "remove the buzzing"],
+    voice_boost: ["make voices clearer", "boost the voice", "enhance speech", "clearer dialogue", "make the talking easier to hear", "enhance the vocals", "voice clarity", "improve the voice", "make speech clearer", "clearer voices"],
+    bass_boost: ["bass boost", "more bass", "boost the bass", "deeper sound", "add bass", "heavier bass", "more low end"],
+    volume_up: ["louder", "turn it up", "increase the volume", "make it louder", "raise the volume", "volume up", "boost the volume", "turn the sound up", "make the audio louder"],
+    volume_down: ["quieter", "turn it down", "lower the volume", "make it quieter", "reduce the volume", "volume down", "turn the sound down", "make the audio quieter", "too loud"],
+    best_parts: ["highlights only", "just the highlights", "highlights", "the highlights", "show only the highlights", "make it 15 seconds with the best parts", "highlight reel", "keep the best moments", "make a highlights video", "best bits only", "shorten it to the best parts", "make a short version", "keep the most interesting parts", "make a 30 second highlight", "summarize the video", "make a recap", "cut it down to the good parts", "best moments"],
+    audio_reset: ["remove audio effects", "reset the sound", "original audio", "undo the audio cleanup", "turn off the sound effects", "reset audio", "no audio filters"],
     unknown: ["hello", "hi there", "how are you", "what is the weather", "hows the weather today", "what day is it", "tell me about yourself", "where am i", "tell me a joke", "who are you", "asdf", "qwerty", "banana", "ok", "thanks", "write code", "what time is it", "play music", "order pizza", "lorem ipsum", "the meaning of life", "send an email", "book a flight", "yes", "no", "cat", "dog"],
   };
   const LABELS = Object.keys(INTENTS);
@@ -693,8 +702,8 @@
   const RANGE = { hue: [-180, 180], fade: [0, 100], sepia: [0, 100], mono: [0, 100], vignette: [0, 100], grain: [0, 100], blur: [0, 100], sharpen: [0, 100] };
   const rng = (k) => RANGE[k] || [-100, 100];
   const ART = new Set(["light_leak", "glow", "flare", "stars", "birds", "sparkles", "snow", "rain", "bokeh", "confetti", "hearts", "moon", "sunset_stripes", "clouds", "frame", "add_text"]);
-  const PRETTY = { auto_enhance: "auto-enhance", brighten: "brighter", darken: "darker", contrast_up: "more contrast", contrast_down: "less contrast", warmer: "warmer", cooler: "cooler", saturate: "more color", desaturate: "less color", black_white: "black & white", sepia: "sepia", vintage: "vintage film", cinematic: "cinematic", moody: "moody", golden_hour: "golden hour", vignette_add: "vignette", vignette_remove: "no vignette", grain_add: "grain", grain_remove: "no grain", sharpen: "sharpen", soften: "soften", shadows_up: "lift shadows", highlights_down: "recover highlights", fix_color: "white balance", crop_smart: "smart crop", crop_ratio: "crop to ratio", rotate: "rotate", flip: "flip", add_text: "text", frame: "frame", light_leak: "light leak", glow: "glow", flare: "lens flare", stars: "stars", birds: "birds", sparkles: "sparkles", snow: "snow", rain: "rain", bokeh: "bokeh", confetti: "confetti", hearts: "hearts", moon: "moon", sunset_stripes: "retro sun", clouds: "clouds", remove_bg: "remove background", reset: "reset", critique: "critique", trim_start: "trim start", trim_end: "trim end", shorten: "shorten", slow_down: "slow motion", speed_up: "speed up", normal_speed: "normal speed", mute: "mute", unmute: "unmute", scene_split: "split scenes", fade_in: "fade in", fade_out: "fade out", reframe: "follow subject" };
-  const VIDEO_INTENTS = new Set(["trim_start", "trim_end", "shorten", "slow_down", "speed_up", "normal_speed", "mute", "unmute", "scene_split", "fade_in", "fade_out", "reframe"]);
+  const PRETTY = { auto_enhance: "auto-enhance", brighten: "brighter", darken: "darker", contrast_up: "more contrast", contrast_down: "less contrast", warmer: "warmer", cooler: "cooler", saturate: "more color", desaturate: "less color", black_white: "black & white", sepia: "sepia", vintage: "vintage film", cinematic: "cinematic", moody: "moody", golden_hour: "golden hour", vignette_add: "vignette", vignette_remove: "no vignette", grain_add: "grain", grain_remove: "no grain", sharpen: "sharpen", soften: "soften", shadows_up: "lift shadows", highlights_down: "recover highlights", fix_color: "white balance", crop_smart: "smart crop", crop_ratio: "crop to ratio", rotate: "rotate", flip: "flip", add_text: "text", frame: "frame", light_leak: "light leak", glow: "glow", flare: "lens flare", stars: "stars", birds: "birds", sparkles: "sparkles", snow: "snow", rain: "rain", bokeh: "bokeh", confetti: "confetti", hearts: "hearts", moon: "moon", sunset_stripes: "retro sun", clouds: "clouds", remove_bg: "remove background", reset: "reset", critique: "critique", trim_start: "trim start", trim_end: "trim end", shorten: "shorten", slow_down: "slow motion", speed_up: "speed up", normal_speed: "normal speed", mute: "mute", unmute: "unmute", scene_split: "split scenes", fade_in: "fade in", fade_out: "fade out", reframe: "follow subject", remove_silence: "remove silence", level_audio: "even out loudness", reduce_hum: "reduce hum", voice_boost: "clearer voices", bass_boost: "bass boost", volume_up: "louder", volume_down: "quieter", best_parts: "best parts", audio_reset: "reset sound" };
+  const VIDEO_INTENTS = new Set(["trim_start", "trim_end", "shorten", "slow_down", "speed_up", "normal_speed", "mute", "unmute", "scene_split", "fade_in", "fade_out", "reframe", "remove_silence", "level_audio", "reduce_hum", "voice_boost", "bass_boost", "volume_up", "volume_down", "best_parts", "audio_reset"]);
   const PHOTO_ONLY = new Set(["rotate", "flip", "remove_bg"]);
   function secondsIn(c) {
     const s = String(c).toLowerCase();
@@ -777,7 +786,23 @@
         switch (u.intent) {
           case "trim_start": video.push({ op: "trim_start", s: secondsIn(cl) ?? 1 }); break;
           case "trim_end": video.push({ op: "trim_end", s: secondsIn(cl) ?? 1 }); break;
-          case "shorten": { const r = rangeIn(cl); if (r) video.push({ op: "keep", a: r.a, b: r.b }); else { const sec = secondsIn(cl); video.push(sec ? { op: "keep", a: 0, b: sec } : { op: "keep_share", share: 0.75 }); } break; }
+          case "shorten": {
+            const r = rangeIn(cl), sec = secondsIn(cl);
+            if (r) video.push({ op: "keep", a: r.a, b: r.b });
+            else if (sec && /\b(first|start|beginning|opening)\b/i.test(cl)) video.push({ op: "keep", a: 0, b: sec });
+            else if (sec && /\b(last|end|ending)\b/i.test(cl)) video.push({ op: "keep_last", s: sec });
+            else video.push({ op: "best", target: sec || null });
+            break;
+          }
+          case "best_parts": video.push({ op: "best", target: secondsIn(cl) || secondsIn(request) || null }); break;
+          case "remove_silence": video.push({ op: "silence", long: /long|awkward|big/i.test(cl) }); break;
+          case "level_audio": video.push({ op: "sfx", key: "level", v: true }); break;
+          case "reduce_hum": video.push({ op: "sfx", key: "hum", v: true }); break;
+          case "voice_boost": video.push({ op: "sfx", key: "voice", v: true }); break;
+          case "bass_boost": video.push({ op: "sfx", key: "bass", v: true }); break;
+          case "audio_reset": video.push({ op: "sfx_reset" }); break;
+          case "volume_up": video.push({ op: "volume", d: 0.3 * k }); break;
+          case "volume_down": video.push({ op: "volume", d: -0.3 * k }); break;
           case "slow_down": { let sp = speedIn(cl) ?? (k > 1.2 ? 0.25 : 0.5); if (sp > 1) sp = 1 / sp; video.push({ op: "speed", v: sp }); break; }
           case "speed_up": { let sp = speedIn(cl) ?? (/timelapse|hyperlapse/i.test(cl) ? 4 : k > 1.2 ? 3 : 2); if (sp < 1) sp = 1 / sp; video.push({ op: "speed", v: sp }); break; }
           case "normal_speed": video.push({ op: "speed", v: 1 }); break;

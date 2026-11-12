@@ -456,7 +456,7 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
       <div class="ai-actions"><button class="btn primary" id="vAIGo">Apply to video</button></div>
       <div class="chips" id="vAIChips"></div>
       <div class="label">History</div>
-      <div class="log" id="vAILog"><div class="empty-log">Fast Edit AI edits the whole video on your device: trims, speed, slow motion, scene splits, fades, framing for TikTok or Reels that follows the subject, color grades, captions and moving effects. Every AI edit is one Undo step.</div></div>
+      <div class="log" id="vAILog"><div class="empty-log">Fast Edit AI edits the whole video on your device: trims, best-parts shortening, silence removal, sound cleanup, speed, slow motion, scene splits, fades, framing for TikTok or Reels that follows the subject, color grades, captions and moving effects. Every AI edit is one Undo step.</div></div>
     </div>
 
     <div class="tabpane" id="vpane-adjust" hidden>
@@ -482,6 +482,11 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
           <div class="btnrow"><button class="btn sm" id="vMoveL">Move earlier</button><button class="btn sm" id="vMoveR">Move later</button><button class="btn sm" id="vDup">Duplicate</button><button class="btn sm danger" id="vDel">Delete</button></div>
         </div>
         <button class="btn sm" id="vScenes">Split at scene changes</button>
+      </section>
+      <section class="vsec">
+        <div class="label">Shorten</div>
+        <div class="btnrow"><div class="field2"><label for="vBestLen">Keep (s)</label><input id="vBestLen" type="number" min="1" step="1" value="15"></div><button class="btn sm" id="vBest">Keep the best parts</button></div>
+        <p class="hint">Keeps the moments with the most movement, sound and color, in their original order.</p>
       </section>
       <section class="vsec">
         <div class="label">Framing</div>
@@ -520,9 +525,15 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
         </div>
       </section>
       <section class="vsec">
-        <div class="label">Audio</div>
+        <div class="label">Sound</div>
         <label class="check"><input type="checkbox" id="vMute"> Mute</label>
-        <div class="field2"><label for="vVol">Volume</label><input type="range" id="vVol" min="0" max="100" value="100"><output id="vVolV" class="docinfo">100%</output></div>
+        <div class="field2"><label for="vVol">Volume</label><input type="range" id="vVol" min="0" max="200" value="100"><output id="vVolV" class="docinfo">100%</output></div>
+        <div class="btnrow"><button class="btn sm" id="vSilence">Remove silent parts</button><label class="check"><input type="checkbox" id="vSilenceLong"> Only long pauses</label></div>
+        <label class="check"><input type="checkbox" id="vSfx-level"> Even out loudness</label>
+        <label class="check"><input type="checkbox" id="vSfx-hum"> Reduce hum and rumble</label>
+        <label class="check"><input type="checkbox" id="vSfx-voice"> Clearer voices</label>
+        <label class="check"><input type="checkbox" id="vSfx-bass"> Bass boost</label>
+        <p class="hint" id="vSoundInfo">Play to hear the changes. They're included when you export.</p>
         <div class="field2"><label for="vFadeIn">Fade in (s)</label><input id="vFadeIn" type="number" step="0.1" min="0" value="0"></div>
         <div class="field2"><label for="vFadeOut">Fade out (s)</label><input id="vFadeOut" type="number" step="0.1" min="0" value="0"></div>
         <p class="hint">Fades go from and to black, with sound.</p>
