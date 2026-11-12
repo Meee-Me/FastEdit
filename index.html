@@ -213,6 +213,20 @@ body.mode-video .vpanel { grid-area: panel; display: flex; }
 .pbar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 .vresult { color: var(--ok); margin: 0; }
 body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-events: none; opacity: .6; }
+.deluxe-acct { display: flex; align-items: center; min-height: 38px; }
+.deluxe-acct:empty { display: none; }
+.looks { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.looks-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.looks-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.look { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.look button { background: none; border: 0; padding: 5px 10px; font-size: 12px; color: var(--fg); }
+.look button:first-child:hover { color: var(--accent); }
+.look .x { padding: 5px 8px 5px 2px; color: var(--muted); }
+.look .x:hover { color: var(--danger); }
+.looks-save { display: flex; gap: 6px; }
+.looks-save input { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.looks-note { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+.looks-note button { background: none; border: 0; padding: 0; color: var(--accent); font-size: inherit; text-decoration: underline; }
 #toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-weight: 500; z-index: 50; max-width: calc(100% - 32px); }
 
 @media (max-width: 900px) {
@@ -256,6 +270,7 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
       <button class="btn ghost sm" id="zoomFit">Fit</button>
     </div>
     <button class="btn primary photo-only" id="btnExport">Export</button>
+    <div id="deluxeAccount" class="deluxe-acct" aria-label="Deluxe account"></div>
 
     <div class="pop" id="newPop" hidden style="left:120px">
       <h4>New blank canvas</h4>
@@ -359,6 +374,7 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
 
     <div class="tabpane" id="pane-adjust" hidden>
       <div class="chips" id="presetChips"></div>
+      <div class="looks" data-looks="photo"></div>
       <div id="adjGroups" style="display:grid;gap:18px"></div>
       <button class="btn" id="adjReset">Reset all adjustments</button>
       <div class="hint">Adjustments apply to the whole image, above all layers. Double-click a slider to reset it.</div>
@@ -445,6 +461,7 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
 
     <div class="tabpane" id="vpane-adjust" hidden>
       <div class="chips" id="vPresets"></div>
+      <div class="looks" data-looks="video"></div>
       <label class="check"><input type="checkbox" id="vGrade"> Teal &amp; orange movie grade</label>
       <div id="vAdjGroups" style="display:grid;gap:18px"></div>
       <button class="btn" id="vAdjReset">Reset all adjustments</button>
@@ -525,6 +542,7 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
 </div>
 <div id="toast" hidden></div>
 
+<script src="https://deluxe-main.vercel.app/deluxe.js" data-app="edit"></script>
 <script src="fastai.js"></script>
 <script>
 (() => {
@@ -1182,7 +1200,10 @@ function initAI() {
 }
 
 /* ---------- Shared with video mode ---------- */
-window.FE = { DEF, RANGE, GROUPS, PRESETS, fmtAdj, FONTS, toast };
+window.FE = { DEF, RANGE, GROUPS, PRESETS, fmtAdj, FONTS, toast,
+  getAdj: () => ({ ...S.adj }),
+  applyLook(adj) { pushUndo(); S.adj = { ...DEF }; for (const k of Object.keys(DEF)) if (typeof adj[k] === "number") { const [mn, mx] = rng(k); S.adj[k] = Math.round(Math.max(mn, Math.min(mx, adj[k]))); } syncAdj(); render(); },
+};
 
 /* ---------- Boot ---------- */
 setTool("brush");
@@ -1199,5 +1220,6 @@ setTool("brush");
 })();
 </script>
 <script src="video.js"></script>
+<script src="deluxe-link.js"></script>
 </body>
 </html>

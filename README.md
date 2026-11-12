@@ -36,6 +36,14 @@ Switch to **Video** at the top. Everything runs on your device in [`video.js`](v
 - **Adjustments:** 16 sliders plus presets and a before/after compare
 - **Files:** open, drag in or paste images; export PNG, JPEG or WebP; 30-step undo
 
+## Deluxe account
+
+Fast Edit is a Deluxe website. **Sign in with Deluxe Main** (top right) uses your Deluxe account, and the ∷ menu links every Deluxe website. Signing in is optional; guests can use everything.
+
+- **My looks** (in both Adjust tabs) saves your current adjustments as a named look that works on photos and videos. Signed in, looks are kept in your Deluxe account (`Deluxe.data`, key `looks`) on every device. As a guest they stay in this browser and move into your account when you sign in.
+- Your photos and videos are never uploaded; only the looks are saved to Deluxe Main.
+- Deluxe Main must list Fast Edit's address (`https://fastedit.vercel.app`) as the `edit` website in its `worker/apps.js`, or sign-in is refused.
+
 ## Deploy
 
 It's a static site with no build step. On Vercel, import the repository and deploy. No environment variables are needed.

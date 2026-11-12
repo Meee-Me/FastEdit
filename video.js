@@ -660,5 +660,8 @@
   });
   let saved = "photo"; try { saved = localStorage.getItem("fastedit.mode") || "photo"; } catch {}
   if (saved === "video") setMode("video");
-  window.FEVideo = { V, seek, total, play, pause, addFiles, get exporting() { return !!EXP; } };
+  window.FEVideo = { V, seek, total, play, pause, addFiles, get exporting() { return !!EXP; },
+    getAdj: () => ({ ...V.adj }),
+    applyLook(adj) { pushUndo(); V.adj = { ...DEF }; for (const k of Object.keys(DEF)) if (typeof adj[k] === "number" && k !== "sharpen") { const [mn, mx] = k in FE.RANGE ? FE.RANGE[k] : [-100, 100]; V.adj[k] = Math.round(clamp(adj[k], mn, mx)); } syncAdj(); redrawSoon(); },
+  };
 })();
