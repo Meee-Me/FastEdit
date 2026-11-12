@@ -89,7 +89,7 @@
     highlights_down: ["recover highlights", "tone down highlights", "less highlights", "reduce highlights", "blown out", "highlights too bright", "save the sky", "bring back sky", "lower highlights", "the sky is too bright"],
     fix_color: ["white balance", "fix colors", "color cast", "neutral colors", "correct colors", "remove tint", "fix white balance", "colors look off", "auto color", "balance colors", "fix the color", "too green", "realistic colors", "natural colors"],
     crop_smart: ["crop", "better composition", "crop it", "recompose", "crop to subject", "tighter crop", "zoom in on subject", "rule of thirds", "stronger composition", "improve framing", "reframe", "crop to a stronger composition", "fix composition", "smart crop"],
-    crop_ratio: ["square", "make it square", "instagram square", "portrait crop", "crop to 4 5", "story format", "widescreen", "crop 16 9", "landscape crop", "vertical crop", "crop to ratio", "9 16", "cinema crop", "1 1", "3 2 crop", "phone wallpaper"],
+    crop_ratio: ["vertical for tiktok", "make it vertical", "for instagram reels", "youtube shorts format", "tiktok format", "for my story", "make it widescreen", "reel format", "square", "make it square", "instagram square", "portrait crop", "crop to 4 5", "story format", "widescreen", "crop 16 9", "landscape crop", "vertical crop", "crop to ratio", "9 16", "cinema crop", "1 1", "3 2 crop", "phone wallpaper"],
     rotate: ["rotate", "rotate left", "rotate right", "turn it", "rotate 90", "upside down", "rotate 180", "turn sideways", "rotate clockwise", "rotate counterclockwise", "turn it left", "turn it right"],
     flip: ["flip", "mirror", "flip horizontal", "flip vertical", "mirror image", "reverse it", "flip it", "flip upside", "mirror it"],
     add_text: ["add text", "add a caption", "caption", "write", "title", "add title", "put text", "add words", "label it", "text that says", "add a quote", "headline", "watermark", "add a fitting caption", "write something", "add a title in elegant type", "words on it", "typography"],
@@ -111,7 +111,19 @@
     remove_bg: ["remove background", "remove the background", "cut out", "background removal", "transparent background", "isolate subject", "delete background", "erase background", "cutout", "extract subject", "no background", "remove bg"],
     reset: ["reset", "start over", "undo everything", "remove all edits", "original look", "clear adjustments", "revert", "go back to original", "reset adjustments"],
     critique: ["critique", "feedback", "what do you think", "review my photo", "how can i improve", "rate it", "analyze", "suggestions", "any tips", "is it good", "rate my photo", "critique this image", "give me feedback"],
-    unknown: ["hello", "hi there", "how are you", "what is the weather", "tell me a joke", "who are you", "asdf", "qwerty", "banana", "ok", "thanks", "write code", "what time is it", "play music", "order pizza", "lorem ipsum", "the meaning of life", "send an email", "book a flight", "yes", "no", "cat", "dog"],
+    trim_start: ["trim the first 3 seconds", "cut the first 2 seconds", "remove the beginning", "cut the intro", "trim the start", "skip the first 5 seconds", "start later", "remove the first second", "trim the beginning by 2 seconds", "cut off the start", "delete the first 4 seconds"],
+    trim_end: ["trim the last 3 seconds", "cut the last 2 seconds", "remove the ending", "cut the outro", "trim the end", "end earlier", "remove the last second", "cut off the end", "delete the last 4 seconds", "stop earlier"],
+    shorten: ["make it 15 seconds", "shorten to 10 seconds", "keep the first 10 seconds", "keep only 5 to 12 seconds", "make it shorter", "cut it down to 30 seconds", "max 20 seconds long", "keep from 3 to 8 seconds", "only keep the middle part", "shorten it", "make the video shorter"],
+    slow_down: ["slow motion", "slow it down", "half speed", "0 5x", "slower", "slow mo", "play slower", "quarter speed", "slowmo", "slow down the video"],
+    speed_up: ["speed up", "faster", "timelapse", "make it a timelapse", "time lapse", "turn it into a timelapse", "2x speed", "double speed", "play faster", "fast forward", "hyperlapse", "3x", "speed it up", "make the video faster"],
+    normal_speed: ["normal speed", "reset speed", "1x", "real time speed", "original speed", "regular speed"],
+    mute: ["mute", "remove audio", "no sound", "silent", "mute the audio", "turn off sound", "remove the sound", "kill the audio", "without sound", "mute it"],
+    unmute: ["unmute", "turn sound on", "restore audio", "bring back the sound", "with sound", "audio on", "keep the audio", "turn the sound back on"],
+    scene_split: ["split scenes", "detect scenes", "cut at scene changes", "split into shots", "find the cuts", "split at scene changes", "scene detection", "separate the shots", "break into scenes", "split it up by scene"],
+    fade_in: ["fade in", "fade from black", "start with a fade", "fade in at the start", "open with a fade", "fade in from black"],
+    fade_out: ["fade out", "fade to black", "end with a fade", "fade out at the end", "close with a fade", "fade out to black"],
+    reframe: ["follow the subject", "track the subject", "keep the subject centered", "auto reframe", "smart reframe", "keep them in frame", "reframe", "center the subject", "follow the action", "track the person"],
+    unknown: ["hello", "hi there", "how are you", "what is the weather", "hows the weather today", "what day is it", "tell me about yourself", "where am i", "tell me a joke", "who are you", "asdf", "qwerty", "banana", "ok", "thanks", "write code", "what time is it", "play music", "order pizza", "lorem ipsum", "the meaning of life", "send an email", "book a flight", "yes", "no", "cat", "dog"],
   };
   const LABELS = Object.keys(INTENTS);
   const K = LABELS.length;
@@ -226,6 +238,7 @@
   function splitClauses(text) {
     const quotes = [];
     let t = String(text).replace(/["“”«»]([^"“”«»]{1,140})["“”«»]/g, (m, q) => { quotes.push(q.trim()); return ` QUOTE${quotes.length - 1} `; });
+    t = t.replace(/(\d)\s*(?:s|sec\w*)?\s+and\s+(\d)/gi, "$1 to $2");
     t = t.replace(/black\s*(?:and|&|n)\s*white/gi, "blackwhite").replace(/teal\s*(?:and|&)\s*orange/gi, "tealorange").replace(/\bb\s*[&\/]\s*w\b/gi, "blackwhite");
     const parts = t.split(/\s*(?:[,;.!?]+|\band then\b|\bthen\b|\band also\b|\balso\b|\bplus\b|\band\b|\bwith\b|\+|&)\s*/i).map((s) => s.trim()).filter(Boolean);
     return { quotes, clauses: parts.map((p) => ({ text: p.replace(/QUOTE\d+/g, " ").replace(/\s+/g, " ").trim(), quote: (p.match(/QUOTE(\d+)/) || [])[1] })) };
@@ -671,7 +684,7 @@
   };
   function renderJob(job, A, source, env = {}) {
     const w = source.width, h = source.height, c = mk(w, h), ctx = c.getContext("2d");
-    const r = rngFrom(hashStr(job.kind + (job.clause || "")) ^ (Date.now() & 0xffff));
+    const r = rngFrom(job.seed != null ? job.seed : hashStr(job.kind + (job.clause || "")) ^ (Date.now() & 0xffff));
     const res = JOBS[job.kind](ctx, A, w, h, job, r, { ...env, source });
     return { canvas: c, name: res.name, blend: res.blend || "source-over", opacity: res.opacity ?? 1, msg: res.msg };
   }
@@ -680,7 +693,29 @@
   const RANGE = { hue: [-180, 180], fade: [0, 100], sepia: [0, 100], mono: [0, 100], vignette: [0, 100], grain: [0, 100], blur: [0, 100], sharpen: [0, 100] };
   const rng = (k) => RANGE[k] || [-100, 100];
   const ART = new Set(["light_leak", "glow", "flare", "stars", "birds", "sparkles", "snow", "rain", "bokeh", "confetti", "hearts", "moon", "sunset_stripes", "clouds", "frame", "add_text"]);
-  const PRETTY = { auto_enhance: "auto-enhance", brighten: "brighter", darken: "darker", contrast_up: "more contrast", contrast_down: "less contrast", warmer: "warmer", cooler: "cooler", saturate: "more color", desaturate: "less color", black_white: "black & white", sepia: "sepia", vintage: "vintage film", cinematic: "cinematic", moody: "moody", golden_hour: "golden hour", vignette_add: "vignette", vignette_remove: "no vignette", grain_add: "grain", grain_remove: "no grain", sharpen: "sharpen", soften: "soften", shadows_up: "lift shadows", highlights_down: "recover highlights", fix_color: "white balance", crop_smart: "smart crop", crop_ratio: "crop to ratio", rotate: "rotate", flip: "flip", add_text: "text", frame: "frame", light_leak: "light leak", glow: "glow", flare: "lens flare", stars: "stars", birds: "birds", sparkles: "sparkles", snow: "snow", rain: "rain", bokeh: "bokeh", confetti: "confetti", hearts: "hearts", moon: "moon", sunset_stripes: "retro sun", clouds: "clouds", remove_bg: "remove background", reset: "reset", critique: "critique" };
+  const PRETTY = { auto_enhance: "auto-enhance", brighten: "brighter", darken: "darker", contrast_up: "more contrast", contrast_down: "less contrast", warmer: "warmer", cooler: "cooler", saturate: "more color", desaturate: "less color", black_white: "black & white", sepia: "sepia", vintage: "vintage film", cinematic: "cinematic", moody: "moody", golden_hour: "golden hour", vignette_add: "vignette", vignette_remove: "no vignette", grain_add: "grain", grain_remove: "no grain", sharpen: "sharpen", soften: "soften", shadows_up: "lift shadows", highlights_down: "recover highlights", fix_color: "white balance", crop_smart: "smart crop", crop_ratio: "crop to ratio", rotate: "rotate", flip: "flip", add_text: "text", frame: "frame", light_leak: "light leak", glow: "glow", flare: "lens flare", stars: "stars", birds: "birds", sparkles: "sparkles", snow: "snow", rain: "rain", bokeh: "bokeh", confetti: "confetti", hearts: "hearts", moon: "moon", sunset_stripes: "retro sun", clouds: "clouds", remove_bg: "remove background", reset: "reset", critique: "critique", trim_start: "trim start", trim_end: "trim end", shorten: "shorten", slow_down: "slow motion", speed_up: "speed up", normal_speed: "normal speed", mute: "mute", unmute: "unmute", scene_split: "split scenes", fade_in: "fade in", fade_out: "fade out", reframe: "follow subject" };
+  const VIDEO_INTENTS = new Set(["trim_start", "trim_end", "shorten", "slow_down", "speed_up", "normal_speed", "mute", "unmute", "scene_split", "fade_in", "fade_out", "reframe"]);
+  const PHOTO_ONLY = new Set(["rotate", "flip", "remove_bg"]);
+  function secondsIn(c) {
+    const s = String(c).toLowerCase();
+    if (/half a second/.test(s)) return 0.5;
+    let m = s.match(/(\d+(?:\.\d+)?)\s*(?:s|sec|secs|second|seconds)\b/);
+    if (m) return +m[1];
+    if (/\b(?:a|one|the first|the last)\s+second\b/.test(s)) return 1;
+    m = s.match(/\b(\d+(?:\.\d+)?)\b/); if (m && !/\d\s*x\b|x\s*\d/.test(s)) return +m[1];
+    return null;
+  }
+  function rangeIn(c) {
+    const m = String(c).toLowerCase().match(/(\d+(?:\.\d+)?)\s*(?:s|sec\w*)?\s*(?:to|-|–|until|through)\s*(\d+(?:\.\d+)?)/);
+    return m && +m[2] > +m[1] ? { a: +m[1], b: +m[2] } : null;
+  }
+  function speedIn(c) {
+    const s = String(c).toLowerCase();
+    let m = s.match(/(\d+(?:\.\d+)?)\s*x\b/) || s.match(/\bx\s*(\d+(?:\.\d+)?)/) || s.match(/(\d+(?:\.\d+)?)\s*times/);
+    if (m && +m[1] > 0) return +m[1];
+    if (/quarter/.test(s)) return 0.25; if (/half/.test(s)) return 0.5; if (/double|twice/.test(s)) return 2; if (/triple/.test(s)) return 3; if (/quadruple/.test(s)) return 4;
+    return null;
+  }
 
   function critique(A) {
     const notes = [], sugg = []; let score = 10;
@@ -727,14 +762,35 @@
     }
     if (mode === "critique" || intents.some((u) => u.intent === "critique")) return { critique: critique(A), analysis: A, understood: intents.filter((u) => u.intent === "critique") };
 
-    const adj = { ...cur }, notes = [], jobs = []; let crop = null, rotate = 0, flip = null, reset = false, removeBg = false;
+    const adj = { ...cur }, notes = [], jobs = [], video = []; let crop = null, rotate = 0, flip = null, reset = false, removeBg = false;
+    const isVideo = mode === "video" || mode === "video-art";
     const addA = (k, v) => { const [a, b] = rng(k); adj[k] = Math.round(clamp((adj[k] || 0) + v, a, b)); };
     const atLeast = (k, v) => { const [a, b] = rng(k); adj[k] = Math.round(clamp(Math.max(adj[k] || 0, v), a, b)); };
     const set = (k, v) => { const [a, b] = rng(k); adj[k] = Math.round(clamp(v, a, b)); };
 
-    if (!intents.length && mode === "art") intents = [{ intent: "abstract", p: 1, clause: request || "" }];
+    if (!intents.length && (mode === "art" || mode === "video-art")) intents = [{ intent: "abstract", p: 1, clause: request || "" }];
     for (const u of intents) {
       const k = intensityOf(u.clause), cl = u.clause;
+      if (!isVideo && VIDEO_INTENTS.has(u.intent)) { notes.push(`“${cl}” is a video edit, so switch to Video mode at the top to use it`); continue; }
+      if (isVideo && PHOTO_ONLY.has(u.intent)) { notes.push(`${PRETTY[u.intent]} isn't available for video yet`); continue; }
+      if (isVideo && (VIDEO_INTENTS.has(u.intent) || u.intent === "crop_ratio" || u.intent === "crop_smart")) {
+        switch (u.intent) {
+          case "trim_start": video.push({ op: "trim_start", s: secondsIn(cl) ?? 1 }); break;
+          case "trim_end": video.push({ op: "trim_end", s: secondsIn(cl) ?? 1 }); break;
+          case "shorten": { const r = rangeIn(cl); if (r) video.push({ op: "keep", a: r.a, b: r.b }); else { const sec = secondsIn(cl); video.push(sec ? { op: "keep", a: 0, b: sec } : { op: "keep_share", share: 0.75 }); } break; }
+          case "slow_down": { let sp = speedIn(cl) ?? (k > 1.2 ? 0.25 : 0.5); if (sp > 1) sp = 1 / sp; video.push({ op: "speed", v: sp }); break; }
+          case "speed_up": { let sp = speedIn(cl) ?? (/timelapse|hyperlapse/i.test(cl) ? 4 : k > 1.2 ? 3 : 2); if (sp < 1) sp = 1 / sp; video.push({ op: "speed", v: sp }); break; }
+          case "normal_speed": video.push({ op: "speed", v: 1 }); break;
+          case "mute": video.push({ op: "mute", v: true }); break;
+          case "unmute": video.push({ op: "mute", v: false }); break;
+          case "scene_split": video.push({ op: "scenes" }); break;
+          case "fade_in": video.push({ op: "fade_in", s: secondsIn(cl) ?? 1 }); break;
+          case "fade_out": video.push({ op: "fade_out", s: secondsIn(cl) ?? 1 }); break;
+          case "reframe": case "crop_smart": video.push({ op: "follow" }); break;
+          case "crop_ratio": { const ar = ratioIn(cl) || ratioIn(request) || (/tiktok|reel|short|story|vertical/i.test(request) ? 9 / 16 : 1); video.push({ op: "ratio", ar }); video.push({ op: "follow" }); break; }
+        }
+        continue;
+      }
       switch (u.intent) {
         case "reset": for (const key of Object.keys(adj)) adj[key] = 0; reset = true; notes.push("reset all adjustments"); break;
         case "auto_enhance": {
@@ -780,7 +836,7 @@
       }
     }
     if (!intents.length) throw { code: "not_understood", missed, message: missed.length ? `I didn't understand “${missed.join("”, “")}”.` : "Tell me what to change." };
-    return { adjustments: adj, resetAdjustments: reset, crop, rotate, flip, removeBackground: removeBg, jobs, notes, missed, understood: intents.filter((u) => u.intent !== "abstract").map((u) => ({ intent: u.intent, label: PRETTY[u.intent] || u.intent, p: u.p })) };
+    return { adjustments: adj, resetAdjustments: reset, crop, rotate, flip, removeBackground: removeBg, jobs, video, notes, missed, understood: intents.filter((u) => u.intent !== "abstract").map((u) => ({ intent: u.intent, label: PRETTY[u.intent] || u.intent, p: u.p })) };
   }
   function sentence(parts) {
     const p = parts.filter(Boolean); if (!p.length) return "";
@@ -791,7 +847,7 @@
   global.FastAI = {
     version: "1.0",
     train, get ready() { return net.ready; }, get stats() { return net.stats; },
-    classify, analyze, plan, renderJob, removeBackground, critique, sentence,
+    classify, analyze, plan, renderJob, removeBackground, critique, sentence, rngFrom, hashStr,
     skills: Object.keys(PRETTY).map((k) => PRETTY[k]),
   };
 })(window);

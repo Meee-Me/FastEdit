@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Fast Edit</title>
-<meta name="description" content="Fast Edit is a layer-based photo editor with its own on-device AI, built from scratch.">
+<meta name="description" content="Fast Edit is a photo and video editor with its own on-device AI, built from scratch.">
 <meta name="theme-color" content="#15171b">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2315171b'/%3E%3Cpath d='M18 4 8 18h7l-2 10 11-15h-7z' fill='%23f0a43a'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -165,6 +165,54 @@ input[type=range] { accent-color: var(--accent); height: 18px; }
 .agentbar .who span { font-size: 11.5px; color: var(--muted); }
 .agentdot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
 .agentdot.ok { background: var(--ok); } .agentdot.bad { background: var(--danger); }
+
+/* Mode switch + video mode */
+.modeseg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 3px; }
+.modeseg button { border: 0; background: transparent; color: var(--muted); padding: 5px 12px; border-radius: 6px; font-weight: 600; }
+.modeseg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.vstage, .vpanel { display: none; }
+body.mode-video .app { grid-template-areas: "top top top" "vstage vstage panel"; }
+body.mode-video .rail, body.mode-video .stagecol, body.mode-video #photoPanel, body.mode-video .photo-only { display: none !important; }
+body.mode-video .vstage { grid-area: vstage; display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
+body.mode-video .vpanel { grid-area: panel; display: flex; }
+.vview { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; padding: 12px; overflow: hidden; }
+.vview canvas { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; background: #000; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+.vempty { position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; text-align: center; color: var(--muted); }
+.transport { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.transport #vPlay { min-width: 76px; }
+.tc { font-family: var(--font-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; margin-left: 6px; }
+.timeline { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 0; height: 122px; overflow: hidden; touch-action: none; user-select: none; cursor: pointer; flex: none; }
+.ruler { position: relative; height: 20px; border-bottom: 1px solid var(--line); }
+.ruler span { position: absolute; top: 3px; font-family: var(--font-mono); font-size: 10px; color: var(--muted); padding-left: 3px; border-left: 1px solid var(--line); height: 14px; line-height: 14px; }
+.track { position: relative; height: 58px; margin-top: 6px; }
+.ovtrack { height: 28px; margin-top: 4px; }
+.vclip { position: absolute; top: 0; height: 100%; border: 1px solid #4a5160; border-radius: 6px; background-color: var(--panel-2); background-size: auto 100%; background-repeat: repeat-x; padding: 0; overflow: hidden; text-align: left; }
+.vclip span { position: absolute; left: 4px; bottom: 3px; right: 4px; font-size: 11px; background: rgba(10,11,13,.72); padding: 1px 5px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: fit-content; }
+.vclip.sel { border: 2px solid var(--accent); }
+.vov { position: absolute; height: 13px; border: 0; border-radius: 3px; background: #6a5acd; color: #fff; font-size: 9.5px; line-height: 13px; padding: 0 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; }
+.vov.anim { background: #2f8f83; }
+.vov.sel { outline: 2px solid var(--accent); }
+.ovempty { position: absolute; left: 8px; top: 6px; font-size: 11px; color: var(--muted); }
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); pointer-events: none; box-shadow: 0 0 0 1px rgba(0,0,0,.4); }
+.playhead::before { content: ""; position: absolute; top: 0; left: -5px; border: 6px solid transparent; border-top-color: var(--accent); }
+.aibox { width: 100%; min-height: 82px; resize: vertical; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; line-height: 1.45; }
+.vsec { display: grid; gap: 8px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.vsec:last-child { border-bottom: 0; }
+.vgrid { display: grid; gap: 8px; }
+.vname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.field2 { display: flex; align-items: center; gap: 8px; }
+.field2 > label { width: 82px; flex: none; color: var(--muted); font-size: 12px; }
+.field2 input[type=number], .field2 select, .vinput, .vsec select { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; min-width: 0; }
+.field2 input[type=number], .field2 select { flex: 1; }
+.field2 input[type=range] { flex: 1; }
+.vinput { width: 100%; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
+.check input { accent-color: var(--accent); }
+.btn.danger { color: var(--danger); }
+.pbar { height: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.pbar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.vresult { color: var(--ok); margin: 0; }
+body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-events: none; opacity: .6; }
 #toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-weight: 500; z-index: 50; max-width: calc(100% - 32px); }
 
 @media (max-width: 900px) {
@@ -176,6 +224,9 @@ input[type=range] { accent-color: var(--accent); height: 18px; }
   .panel { min-height: 420px; }
   .stage { padding: 12px; }
   .pop { left: 0; right: 0; }
+  body.mode-video .app { grid-template-areas: "top" "vstage" "panel"; }
+  body.mode-video .vstage { min-height: 0; }
+  .vview { height: 46vh; min-height: 240px; flex: none; }
 }
 @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
 </style>
@@ -184,23 +235,27 @@ input[type=range] { accent-color: var(--accent); height: 18px; }
 <div class="app">
   <header class="top">
     <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13.5 2 5 13.5h5.5L9 22l9.5-12.5H13z" fill="currentColor"/></svg></span>Fast <b>Edit</b></div>
-    <div class="grp">
+    <div class="modeseg" role="group" aria-label="Editor mode">
+      <button data-app-mode="photo" aria-pressed="true">Photo</button>
+      <button data-app-mode="video" aria-pressed="false">Video</button>
+    </div>
+    <div class="grp photo-only">
       <button class="btn" id="btnOpen">Open</button>
       <input type="file" id="fileIn" accept="image/*" hidden>
       <button class="btn" id="btnNew">New</button>
       <button class="btn ghost" id="btnUndo" title="Undo (Ctrl+Z)">Undo</button>
       <button class="btn ghost" id="btnRedo" title="Redo (Ctrl+Shift+Z)">Redo</button>
     </div>
-    <div class="docinfo" id="docInfo"></div>
+    <div class="docinfo photo-only" id="docInfo"></div>
     <div class="spacer"></div>
-    <div class="grp">
+    <div class="grp photo-only">
       <button class="btn ghost" id="btnCompare" title="Press and hold to see the image without adjustments">Hold: before</button>
       <button class="btn ghost sm" id="zoomOut" aria-label="Zoom out">−</button>
       <span id="zoomVal">100%</span>
       <button class="btn ghost sm" id="zoomIn" aria-label="Zoom in">+</button>
       <button class="btn ghost sm" id="zoomFit">Fit</button>
     </div>
-    <button class="btn primary" id="btnExport">Export</button>
+    <button class="btn primary photo-only" id="btnExport">Export</button>
 
     <div class="pop" id="newPop" hidden style="left:120px">
       <h4>New blank canvas</h4>
@@ -263,7 +318,7 @@ input[type=range] { accent-color: var(--accent); height: 18px; }
     </div>
   </section>
 
-  <aside class="panel">
+  <aside class="panel" id="photoPanel">
     <div class="tabs" role="tablist">
       <button role="tab" id="t-ai" aria-selected="true" data-tab="ai">AI</button>
       <button role="tab" id="t-adjust" aria-selected="false" data-tab="adjust">Adjust</button>
@@ -330,6 +385,141 @@ input[type=range] { accent-color: var(--accent); height: 18px; }
           <button class="btn sm" id="lyDel" style="color:var(--danger)">Delete</button>
         </div>
       </div>
+    </div>
+  </aside>
+
+  <section class="vstage" id="vStage" aria-label="Video editor">
+    <div class="opts vbar">
+      <button class="btn" id="vOpen">Add video</button>
+      <input type="file" id="vFile" accept="video/*,.mp4,.mov,.webm,.m4v" multiple hidden>
+      <button class="btn ghost" id="vUndo" title="Undo (Ctrl+Z)">Undo</button>
+      <button class="btn ghost" id="vRedo" title="Redo (Ctrl+Shift+Z)">Redo</button>
+      <span class="docinfo" id="vInfo"></span>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="vCompare" title="Press and hold to see the video without edits">Hold: before</button>
+      <button class="btn primary" id="vExportBtn">Export video</button>
+    </div>
+    <div class="vview" id="vView">
+      <canvas id="vCanvas" width="960" height="540"></canvas>
+      <div class="vempty" id="vEmpty" hidden><p>Add a video to start editing.</p><button class="btn primary" id="vEmptyOpen">Add video</button></div>
+      <div class="drop" id="vDrop" hidden>Drop videos to add them to the timeline</div>
+      <div class="busy-veil" id="vBusy" hidden><span class="dot"></span><span id="vBusyText">Working…</span></div>
+    </div>
+    <div class="transport">
+      <button class="btn ghost sm" id="vStart" aria-label="Go to start" title="Go to start">⏮</button>
+      <button class="btn ghost sm" id="vPrev" aria-label="Back one frame" title="Back one frame (←)">‹</button>
+      <button class="btn primary" id="vPlay" aria-label="Play">Play</button>
+      <button class="btn ghost sm" id="vNext" aria-label="Forward one frame" title="Forward one frame (→)">›</button>
+      <span class="tc" id="vTime">00:00.00 / 00:00.00</span>
+      <div class="spacer"></div>
+      <button class="btn sm" id="vSplit" title="Split the clip at the playhead (S)">Split at playhead</button>
+    </div>
+    <div class="timeline" id="vTimeline">
+      <div class="ruler" id="vRuler"></div>
+      <div class="track" id="vClips"></div>
+      <div class="track ovtrack" id="vOvs"></div>
+      <div class="playhead" id="vHead"></div>
+    </div>
+  </section>
+
+  <aside class="panel vpanel" id="vPanel">
+    <div class="tabs" role="tablist" id="vTabs">
+      <button role="tab" aria-selected="true" data-vtab="ai">AI</button>
+      <button role="tab" aria-selected="false" data-vtab="adjust">Adjust</button>
+      <button role="tab" aria-selected="false" data-vtab="edit">Edit</button>
+      <button role="tab" aria-selected="false" data-vtab="export">Export</button>
+    </div>
+
+    <div class="tabpane" id="vpane-ai">
+      <div class="seg" role="group" aria-label="AI mode" id="vAIModes">
+        <button data-vmode="edit" aria-pressed="true">Edit video</button>
+        <button data-vmode="art" aria-pressed="false">Add effects</button>
+        <button data-vmode="critique" aria-pressed="false">Critique</button>
+      </div>
+      <textarea id="vAIPrompt" class="aibox"></textarea>
+      <div class="ai-actions"><button class="btn primary" id="vAIGo">Apply to video</button></div>
+      <div class="chips" id="vAIChips"></div>
+      <div class="label">History</div>
+      <div class="log" id="vAILog"><div class="empty-log">Fast Edit AI edits the whole video on your device: trims, speed, slow motion, scene splits, fades, framing for TikTok or Reels that follows the subject, color grades, captions and moving effects. Every AI edit is one Undo step.</div></div>
+    </div>
+
+    <div class="tabpane" id="vpane-adjust" hidden>
+      <div class="chips" id="vPresets"></div>
+      <label class="check"><input type="checkbox" id="vGrade"> Teal &amp; orange movie grade</label>
+      <div id="vAdjGroups" style="display:grid;gap:18px"></div>
+      <button class="btn" id="vAdjReset">Reset all adjustments</button>
+      <div class="hint">Adjustments apply to every clip. Double-click a slider to reset it.</div>
+    </div>
+
+    <div class="tabpane" id="vpane-edit" hidden>
+      <section class="vsec">
+        <div class="label">Selected clip</div>
+        <p class="hint" id="vClipNone">Click a clip on the timeline to trim it, change its speed or move it.</p>
+        <div id="vClipBox" class="vgrid" hidden>
+          <b id="vClipName" class="vname"></b>
+          <div class="field2"><label for="vIn">Start (s)</label><input id="vIn" type="number" step="0.01" min="0"></div>
+          <div class="field2"><label for="vOut">End (s)</label><input id="vOut" type="number" step="0.01" min="0"></div>
+          <div class="btnrow"><button class="btn sm" id="vSetIn">Start at playhead</button><button class="btn sm" id="vSetOut">End at playhead</button></div>
+          <div class="field2"><label for="vSpeed">Speed</label><select id="vSpeed"><option value="0.25">0.25× (slow motion)</option><option value="0.5">0.5× (slow motion)</option><option value="0.75">0.75×</option><option value="1">1× (normal)</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4× (timelapse)</option></select></div>
+          <p class="hint" id="vClipLen"></p>
+          <div class="btnrow"><button class="btn sm" id="vMoveL">Move earlier</button><button class="btn sm" id="vMoveR">Move later</button><button class="btn sm" id="vDup">Duplicate</button><button class="btn sm danger" id="vDel">Delete</button></div>
+        </div>
+        <button class="btn sm" id="vScenes">Split at scene changes</button>
+      </section>
+      <section class="vsec">
+        <div class="label">Framing</div>
+        <div class="field2"><label for="vRatio">Shape</label><select id="vRatio"><option value="original">Original</option><option value="1.7778">16:9 (YouTube)</option><option value="0.5625">9:16 (TikTok, Reels, Shorts)</option><option value="1">1:1 (square)</option><option value="0.8">4:5 (Instagram)</option></select></div>
+        <label class="check"><input type="checkbox" id="vFollow"> Follow the subject (smart reframe)</label>
+        <div id="vPosRow" class="vgrid">
+          <div class="field2"><label for="vPosX">Horizontal</label><input type="range" id="vPosX" min="0" max="100" value="50"></div>
+          <div class="field2"><label for="vPosY">Vertical</label><input type="range" id="vPosY" min="0" max="100" value="50"></div>
+        </div>
+      </section>
+      <section class="vsec">
+        <div class="label">Text</div>
+        <input type="text" id="vText" class="vinput" placeholder="Caption text" value="Fast Edit">
+        <div class="btnrow">
+          <select id="vTextPos" aria-label="Text position"><option value="bottom">Bottom</option><option value="top">Top</option><option value="center">Center</option></select>
+          <select id="vTextStyle" aria-label="Text style"><option value="">Elegant serif</option><option value="bold">Bold</option><option value="sans">Clean sans</option><option value="handwritten">Handwritten</option><option value="typewriter">Typewriter</option></select>
+          <select id="vTextDur" aria-label="Text duration"><option value="2">2 s</option><option value="3" selected>3 s</option><option value="5">5 s</option><option value="10">10 s</option></select>
+        </div>
+        <button class="btn sm" id="vAddText">Add text at playhead</button>
+      </section>
+      <section class="vsec">
+        <div class="label">Effects</div>
+        <div class="btnrow">
+          <select id="vFx" aria-label="Effect">
+            <optgroup label="Moving"><option value="snow">Snow</option><option value="rain">Rain</option><option value="confetti">Confetti</option><option value="sparkles">Sparkles</option><option value="bokeh">Bokeh lights</option><option value="hearts">Hearts</option></optgroup>
+            <optgroup label="Still"><option value="light_leak">Light leak</option><option value="glow">Glow</option><option value="flare">Lens flare</option><option value="stars">Stars</option><option value="moon|crescent">Crescent moon</option><option value="birds">Birds</option><option value="clouds|fog">Fog</option><option value="sunset_stripes|sun">Retro sun</option><option value="frame|film">Film frame</option><option value="frame|white">White border</option></optgroup>
+          </select>
+          <button class="btn sm" id="vAddFx">Add to whole video</button>
+        </div>
+        <div id="vOvBox" class="vgrid" hidden>
+          <b id="vOvName" class="vname"></b>
+          <label class="check"><input type="checkbox" id="vOvFull"> Whole video</label>
+          <div class="field2"><label for="vOvStart">From (s)</label><input id="vOvStart" type="number" step="0.1" min="0"></div>
+          <div class="field2"><label for="vOvEnd">To (s)</label><input id="vOvEnd" type="number" step="0.1" min="0"></div>
+          <button class="btn sm danger" id="vOvDel">Remove</button>
+        </div>
+      </section>
+      <section class="vsec">
+        <div class="label">Audio</div>
+        <label class="check"><input type="checkbox" id="vMute"> Mute</label>
+        <div class="field2"><label for="vVol">Volume</label><input type="range" id="vVol" min="0" max="100" value="100"><output id="vVolV" class="docinfo">100%</output></div>
+        <div class="field2"><label for="vFadeIn">Fade in (s)</label><input id="vFadeIn" type="number" step="0.1" min="0" value="0"></div>
+        <div class="field2"><label for="vFadeOut">Fade out (s)</label><input id="vFadeOut" type="number" step="0.1" min="0" value="0"></div>
+        <p class="hint">Fades go from and to black, with sound.</p>
+      </section>
+    </div>
+
+    <div class="tabpane" id="vpane-export" hidden>
+      <div class="field2"><label for="vRes">Quality</label><select id="vRes"><option value="480">480p (small file)</option><option value="720" selected>720p HD</option><option value="1080">1080p Full HD</option></select></div>
+      <p class="hint" id="vExpInfo"></p>
+      <button class="btn primary" id="vExport">Export video</button>
+      <button class="btn" id="vCancel" hidden>Cancel export</button>
+      <div id="vExporting" hidden><div class="pbar"><div id="vExpBar"></div></div><p class="hint" id="vExpPct"></p></div>
+      <p id="vExpResult" class="vresult"></p>
+      <p class="hint">Exporting plays your video through once and records it on your device. Nothing is uploaded.</p>
     </div>
   </aside>
 </div>
@@ -801,7 +991,7 @@ const stageEl = $("#stage");
 stageEl.addEventListener("dragover", (e) => { if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); $("#dropHint").hidden = false; } });
 stageEl.addEventListener("dragleave", (e) => { if (e.target === stageEl) $("#dropHint").hidden = true; });
 stageEl.addEventListener("drop", (e) => { e.preventDefault(); $("#dropHint").hidden = true; const f = e.dataTransfer.files[0]; if (f) loadImage(f, false); });
-window.addEventListener("paste", (e) => { if (e.target.closest?.("textarea, input")) return; const f = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith("image/")); if (f) { e.preventDefault(); loadImage(f, true); } });
+window.addEventListener("paste", (e) => { if (document.body.classList.contains("mode-video") || e.target.closest?.("textarea, input")) return; const f = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith("image/")); if (f) { e.preventDefault(); loadImage(f, true); } });
 
 let newBg = "#ffffff";
 $("#btnNew").onclick = (e) => { e.stopPropagation(); togglePop("#newPop"); };
@@ -848,6 +1038,7 @@ $("#btnUndo").onclick = doUndo; $("#btnRedo").onclick = doRedo;
 
 /* ---------- Keyboard ---------- */
 document.addEventListener("keydown", (e) => {
+  if (document.body.classList.contains("mode-video")) return;
   if (e.target.closest("input, textarea, select")) return;
   const k = e.key.toLowerCase();
   if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); e.shiftKey ? doRedo() : doUndo(); return; }
@@ -990,6 +1181,9 @@ function initAI() {
   });
 }
 
+/* ---------- Shared with video mode ---------- */
+window.FE = { DEF, RANGE, GROUPS, PRESETS, fmtAdj, FONTS, toast };
+
 /* ---------- Boot ---------- */
 setTool("brush");
 (function boot() {
@@ -1004,5 +1198,6 @@ setTool("brush");
 })();
 })();
 </script>
+<script src="video.js"></script>
 </body>
 </html>
