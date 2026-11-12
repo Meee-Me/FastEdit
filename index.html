@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Fast Edit</title>
-<meta name="description" content="Fast Edit is a layer-based photo editor with its own on-device AI, built from scratch. Or connect your own agent.">
+<meta name="description" content="Fast Edit is a layer-based photo editor with its own on-device AI, built from scratch.">
 <meta name="theme-color" content="#15171b">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2315171b'/%3E%3Cpath d='M18 4 8 18h7l-2 10 11-15h-7z' fill='%23f0a43a'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -165,28 +165,6 @@ input[type=range] { accent-color: var(--accent); height: 18px; }
 .agentbar .who span { font-size: 11.5px; color: var(--muted); }
 .agentdot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
 .agentdot.ok { background: var(--ok); } .agentdot.bad { background: var(--danger); }
-dialog#agentDlg { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(560px, calc(100% - 32px)); max-height: calc(100% - 32px); box-shadow: 0 30px 80px rgba(0,0,0,.6); }
-dialog#agentDlg::backdrop { background: rgba(5,6,8,.65); }
-.dlg-head { padding: 18px 20px 6px; }
-.dlg-head h2 { margin: 0 0 4px; font-family: var(--font-display); font-size: 20px; }
-.dlg-head p { margin: 0; color: var(--muted); line-height: 1.5; }
-.dlg-body { padding: 12px 20px; display: grid; gap: 10px; }
-.prov { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; }
-.prov:has(input[type=radio]:checked) { border-color: var(--accent); background: rgba(240,164,58,.06); }
-.prov > label { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; cursor: pointer; }
-.prov > label input { margin: 3px 0 0; accent-color: var(--accent); grid-row: span 2; }
-.prov > label b { font-weight: 600; }
-.prov > label span { color: var(--muted); font-size: 12px; line-height: 1.45; }
-.prov .fields { display: grid; gap: 8px; padding-left: 24px; }
-.prov:not(:has(input[type=radio]:checked)) .fields { display: none; }
-.field { display: grid; gap: 4px; }
-.field label { font-size: 12px; color: var(--muted); }
-.field input { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; width: 100%; }
-.note { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
-details.proto summary { cursor: pointer; font-size: 12px; color: var(--accent); }
-details.proto pre { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; overflow-x: auto; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; margin: 8px 0 0; }
-.dlg-foot { display: flex; gap: 8px; align-items: center; padding: 12px 20px 18px; flex-wrap: wrap; }
-.dlg-foot #testResult { flex: 1; min-width: 160px; font-size: 12px; color: var(--muted); }
 #toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-weight: 500; z-index: 50; max-width: calc(100% - 32px); }
 
 @media (max-width: 900px) {
@@ -281,7 +259,7 @@ details.proto pre { background: var(--bg); border: 1px solid var(--line); border
     <div class="stage" id="stage">
       <div class="wrap" id="wrap"><canvas id="view"></canvas><div id="cropBox" hidden></div></div>
       <div class="drop" id="dropHint" hidden>Drop an image to open it</div>
-      <div class="busy-veil" id="busyVeil" hidden><span class="dot"></span><span id="busyText">Looking at your image…</span><button class="btn sm" id="aiStop2">Stop</button></div>
+      <div class="busy-veil" id="busyVeil" hidden><span class="dot"></span><span id="busyText">Looking at your image…</span></div>
     </div>
   </section>
 
@@ -295,8 +273,7 @@ details.proto pre { background: var(--bg); border: 1px solid var(--line); border
     <div class="tabpane" id="pane-ai">
       <div class="agentbar">
         <span class="agentdot" id="agentDot"></span>
-        <div class="who"><b id="agentName">Fast Edit AI</b><span id="agentSub">Checking…</span></div>
-        <button class="btn sm" id="btnAgent">Connect agent</button>
+        <div class="who"><b>Fast Edit AI</b><span id="agentSub">Starting…</span></div>
       </div>
       <div class="seg" role="group" aria-label="AI mode">
         <button data-mode="edit" aria-pressed="true">Edit photo</button>
@@ -306,7 +283,6 @@ details.proto pre { background: var(--bg); border: 1px solid var(--line); border
       <textarea id="aiPrompt" placeholder="Describe an edit, e.g. “warm golden-hour light, lift the shadows and add a subtle vignette”"></textarea>
       <div class="ai-actions">
         <button class="btn primary" id="aiGo">Apply with AI</button>
-        <button class="btn" id="aiStop" hidden>Stop</button>
       </div>
       <div class="chips" id="aiChips"></div>
       <div class="ai-status" id="aiStatus">Starting Fast Edit AI…</div>
@@ -357,50 +333,6 @@ details.proto pre { background: var(--bg); border: 1px solid var(--line); border
     </div>
   </aside>
 </div>
-<dialog id="agentDlg" aria-labelledby="agentDlgTitle">
-  <form method="dialog" id="agentForm">
-    <div class="dlg-head">
-      <h2 id="agentDlgTitle">Connect your agent</h2>
-      <p>Use Fast Edit's own AI, or plug in your own agent. Your choice stays in this browser.</p>
-    </div>
-    <div class="dlg-body">
-      <div class="prov">
-        <label><input type="radio" name="provider" value="builtin"><b>Fast Edit AI (built in)</b><span>Our own AI, built from scratch. It runs entirely in your browser: no account, no key, and your photos never leave your device.</span></label>
-      </div>
-      <div class="prov">
-        <label><input type="radio" name="provider" value="webhook"><b>Your own agent</b><span>Any HTTPS endpoint that speaks the Fast Edit agent protocol: your server, an automation tool, or a local agent.</span></label>
-        <div class="fields">
-          <div class="field"><label for="agentUrl">Agent URL</label><input id="agentUrl" type="url" placeholder="https://my-agent.example.com/fastedit"></div>
-          <div class="field"><label for="agentToken">Bearer token (optional)</label><input id="agentToken" type="password" autocomplete="off"></div>
-          <div class="note">Your endpoint must allow cross-origin requests (CORS) from this site.</div>
-          <details class="proto"><summary>Agent protocol</summary><pre>POST &lt;Agent URL&gt;
-Authorization: Bearer &lt;token&gt;   (if set)
-Content-Type: application/json
-
-{
-  "protocol": "fastedit.agent/v1",
-  "task": "edit" | "art" | "critique" | "ping",
-  "prompt": "full instructions, including the JSON
-             shape Fast Edit expects back",
-  "image": { "media_type": "image/jpeg",
-             "data": "&lt;base64&gt;" } | null
-}
-
-Reply 200 with JSON:
-{ "text": "&lt;the model's reply, a JSON string&gt;" }
-or the requested JSON object itself.
-Errors: non-2xx with { "error": "message" }.</pre></details>
-        </div>
-      </div>
-    </div>
-    <div class="dlg-foot">
-      <span id="testResult"></span>
-      <button class="btn" type="button" id="agentTest">Test connection</button>
-      <button class="btn" value="cancel" formnovalidate>Cancel</button>
-      <button class="btn primary" value="save" id="agentSave">Save</button>
-    </div>
-  </form>
-</dialog>
 <div id="toast" hidden></div>
 
 <script src="fastai.js"></script>
@@ -939,7 +871,7 @@ let toastT = 0;
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
 
 /* ---------- AI ---------- */
-let aiMode = "edit", aiCtl = null, busy = false;
+let aiMode = "edit", busy = false;
 const CHIPS = {
   edit: ["Auto-enhance", "Warmer with a soft vignette", "Cinematic teal & orange", "Black and white, high contrast", "Golden hour glow", "Add a caption", "Crop to a stronger composition", "Remove the background", "Add a hand-drawn frame"],
   art: ["Flock of birds", "Starry night sky and a crescent moon", "Sparkles around the light", "Lens flare", "Retro synthwave sun", "Snowfall", "Bokeh lights", "Confetti", "Low fog", "Light leak"],
@@ -958,7 +890,7 @@ function setStatus(msg, warn) { const s = $("#aiStatus"); s.textContent = msg; s
 function logEntry(kind, text, extra) {
   const log = $("#aiLog"); log.querySelector(".empty-log")?.remove();
   const d = document.createElement("div"); d.className = "entry " + kind;
-  if (kind === "ai") { const w = document.createElement("div"); w.className = "who"; w.textContent = agentLabel(); d.append(w); }
+  if (kind === "ai") { const w = document.createElement("div"); w.className = "who"; w.textContent = "Fast Edit AI"; d.append(w); }
   const t = document.createElement("div"); t.textContent = text; t.style.whiteSpace = "pre-wrap"; d.append(t);
   if (extra) d.append(extra);
   log.prepend(d);
@@ -966,118 +898,27 @@ function logEntry(kind, text, extra) {
 const ERR = {
   not_understood: "I didn't understand that. Try something like “warmer with a vignette”, “crop to square”, or “add stars”.",
   not_ready: "Fast Edit AI is still training. Try again in a second.",
-  network: "Couldn't reach the AI. Check your connection or the agent URL.",
-  agent_error: "Your agent returned an error.",
-  timeout: "The AI took too long. Try a simpler request.",
-  rate_limited: "Too many requests right now. Wait a minute, then try again.",
-  invalid_json: "The agent's reply couldn't be turned into an edit. Try rephrasing the request.",
-  image_rejected: "The image couldn't be sent to your agent. Try a smaller image.",
-  refused: "Your agent declined this request.",
-  prompt_too_large: "That request is too long. Shorten it and try again.",
-  empty_completion: "Your agent didn't return anything. Try again.",
 };
-async function imageBlob() {
-  doRender();
-  const s = Math.min(1, 1024 / Math.max(S.w, S.h)), c = mk(S.w * s, S.h * s), x = c.getContext("2d");
-  x.fillStyle = "#808080"; x.fillRect(0, 0, c.width, c.height); x.drawImage(view, 0, 0, c.width, c.height);
-  return new Promise(r => c.toBlob(r, "image/jpeg", 0.85));
-}
-function docSummary() {
-  return `Document: ${S.w}×${S.h}px. Layers bottom→top: ${S.layers.map(l => `"${l.name}"${l.visible ? "" : " (hidden)"}`).join(", ")}.\nCurrent global adjustments (absolute values): ${JSON.stringify(S.adj)}`;
-}
-const EDIT_SPEC = (req, hasImg, w, h) => `You are the editing engine inside a layer-based photo editor. Turn the user's request into a concrete edit.
-User request: "${req}"
-${hasImg ? "The attached image is the current rendered result (downscaled for you)." : "No image is attached; infer conservatively from the description and settings."}
-${docSummary()}
-
-Global adjustment ranges: exposure -100..100 (50 = +1 EV); contrast, highlights, shadows, temperature (+ = warmer), tint (+ = magenta, - = green), saturation, vibrance: -100..100; hue -180..180 (degrees); fade, sepia, mono (black & white), vignette, grain, sharpen, blur: 0..100. Normal photo corrections stay within about ±40. Values you send are the FINAL absolute values, not deltas.
-
-Reply with ONLY one JSON object:
-{
-  "message": "1-2 plain sentences telling the user what you changed",
-  "adjustments": { only the keys you want to set },
-  "resetAdjustments": false,
-  "rotate": 0,            // 0, 90, 180 or 270 clockwise
-  "flip": null,           // null, "horizontal" or "vertical"
-  "crop": null,           // or {"x":0..1,"y":0..1,"w":0..1,"h":0..1} fractions of the current image
-  "layer": null           // or {"name":"...","blend":"source-over|multiply|screen|overlay|soft-light|lighten|darken|color","opacity":0..1,"ops":[...]}
-}
-Drawing ops for "layer". x/y/cx/cy/x0/x1 are fractions of the image width; y/cy/y0/y1/h/ry are fractions of the height; size, lineWidth, rx, r, radius and maxWidth are fractions of the width. The image is ${w}×${h}px.
-  {"type":"text","text":"...","x":0.5,"y":0.88,"size":0.06,"color":"#ffffff","font":"sans|display|serif|mono|script","weight":400-800,"align":"left|center|right","maxWidth":0.8,"shadow":true,"stroke":null}
-  {"type":"rect","x":0,"y":0,"w":1,"h":1,"fill":"css color or null","stroke":"css color or null","lineWidth":0.01,"radius":0}
-  {"type":"ellipse","cx":0.5,"cy":0.5,"rx":0.1,"ry":0.1,"fill":null,"stroke":"#fff","lineWidth":0.004}
-  {"type":"path","points":[[0.1,0.1],[0.2,0.15]],"closed":false,"smooth":true,"fill":null,"stroke":"#fff","lineWidth":0.004}
-  {"type":"gradient","kind":"linear|radial","x0":0,"y0":0,"x1":1,"y1":1,"r":0.6,"stops":[[0,"rgba(255,190,120,0.55)"],[1,"rgba(255,190,120,0)"]]}  (fills the whole layer; radial uses x0,y0 as center and r as radius)
-Any op may add "opacity":0..1. Only use "layer" when the request needs something added on top (text, shapes, light leaks, glows, frames). Place additions with care for the actual image content.`;
-const ART_SPEC = (req, hasImg) => `You draw artwork that is added as a new layer on top of a photo in a layer-based editor.
-User request: "${req}"
-${hasImg ? "The attached image is the current document, so you can place and color the artwork to fit it." : "No image is attached."}
-${docSummary()}
-
-Reply with ONLY one JSON object:
-{"message":"one plain sentence describing what you drew","name":"short layer name","blend":"source-over|screen|multiply|overlay|soft-light","opacity":1,"svg":"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${S.w} ${S.h}'>...</svg>"}
-SVG rules: viewBox exactly "0 0 ${S.w} ${S.h}". Leave the background transparent unless the user asks for a full scene or background. Use only shapes, paths, text, gradients, filters and patterns: no <image>, no <script>, no <foreignObject>, no external URLs or fonts. Keep the markup under 30 KB. Use single quotes inside the SVG so the JSON string stays valid.`;
-const CRIT_SPEC = (req, hasImg) => `You are a photo editor giving feedback on an image in progress.
-${req ? `The user wants you to focus on: "${req}"` : ""}
-${hasImg ? "The attached image is the current rendered result." : "No image is attached; say so briefly and give general advice."}
-${docSummary()}
-Reply with ONLY one JSON object: {"critique":"4-6 sentences on composition, light and color, plainly written","suggestions":["three short edit instructions the user could send to the AI edit tool, each under 12 words"]}`;
-
 function setBusy(on, label) {
-  busy = on; $("#aiGo").disabled = on; $("#aiStop").hidden = !on; $("#busyVeil").hidden = !on;
+  busy = on; $("#aiGo").disabled = on; $("#busyVeil").hidden = !on;
   if (label) $("#busyText").textContent = label;
 }
-const stopAI = () => aiCtl?.abort();
-$("#aiStop").onclick = stopAI; $("#aiStop2").onclick = stopAI;
 $("#aiGo").onclick = () => runAI();
 $("#aiPrompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); runAI(); } });
 
 async function runAI() {
   if (busy) return;
-  if (!agentReady()) { openAgentDialog(); return setStatus("Connect an AI agent first.", true); }
   const req = $("#aiPrompt").value.trim();
   if (!req && aiMode !== "critique") { $("#aiPrompt").focus(); return toast("Describe what you want first"); }
   const mode = aiMode;
   logEntry("you", (mode === "art" ? "Generate: " : mode === "critique" ? "Critique" + (req ? ": " : "") : "") + req);
-  aiCtl = new AbortController();
-  setBusy(true, mode === "art" ? "Drawing…" : "Looking at your image…");
-  const t0 = Date.now(); const tick = setInterval(() => setStatus(`Working… ${Math.round((Date.now() - t0) / 1000)} s`), 1000);
-  setStatus("Working…");
-  try {
-    if (agent.provider === "builtin") { await runLocal(mode, req); return; }
-    const opts = { signal: aiCtl.signal, cache: false, task: mode };
-    if (agentSendsImages()) { const b = await imageBlob(); if (b) opts.images = [b]; }
-    const hasImg = !!opts.images;
-    if (mode === "edit") {
-      const plan = await aiJSON(EDIT_SPEC(req, hasImg, S.w, S.h), opts);
-      await applyPlan(plan);
-      logEntry("ai", plan?.message || "Edit applied.");
-    } else if (mode === "art") {
-      const art = await aiJSON(ART_SPEC(req, hasImg), opts);
-      if (!art || typeof art.svg !== "string") throw { code: "invalid_json" };
-      const layer = await svgToLayer(art.svg, art.name || "AI art");
-      pushUndo();
-      if (BLENDS.some(b => b[0] === art.blend)) layer.blend = art.blend;
-      if (typeof art.opacity === "number") layer.opacity = Math.max(0, Math.min(1, art.opacity));
-      addLayer(layer);
-      logEntry("ai", art.message || "Added a new layer.");
-    } else {
-      const r = await aiJSON(CRIT_SPEC(req, hasImg), opts);
-      const chips = document.createElement("div"); chips.className = "chips";
-      for (const s of (Array.isArray(r?.suggestions) ? r.suggestions : []).slice(0, 4)) {
-        const b = document.createElement("button"); b.className = "chip"; b.textContent = String(s);
-        b.onclick = () => { $$(".seg button")[0].click(); $("#aiPrompt").value = String(s); runAI(); };
-        chips.append(b);
-      }
-      logEntry("ai", r?.critique || "No critique returned.", chips);
-    }
-    if (mode !== "critique") $("#aiPrompt").value = "";
-    setStatus(hasImg ? "Done. The agent saw the current image." : "Done. The agent worked without seeing the image.");
-  } catch (e) {
-    const code = e?.code;
-    if (code === "cancelled") { setStatus("Stopped."); logEntry("err", "Stopped before finishing."); }
-    else { const msg = ERR[code] || (e instanceof Error ? "Couldn't apply that: " + e.message : e?.message || "Something went wrong. Try again."); setStatus(msg, true); logEntry("err", msg); }
-  } finally { clearInterval(tick); setBusy(false); }
+  setBusy(true, mode === "art" ? "Drawing…" : mode === "critique" ? "Studying your image…" : "Editing…");
+  await new Promise(r => setTimeout(r, 30)); // let the busy state paint
+  try { await runLocal(mode, req); }
+  catch (e) {
+    const msg = ERR[e?.code] || e?.message || "Something went wrong. Try again.";
+    setStatus(msg, true); logEntry("err", msg);
+  } finally { setBusy(false); }
 }
 
 async function runLocal(mode, req) {
@@ -1103,7 +944,6 @@ async function runLocal(mode, req) {
 }
 
 async function applyPlan(p) {
-  if (!p || typeof p !== "object") throw { code: "invalid_json" };
   pushUndo();
   const extra = [];
   const rot = [90, 180, 270].includes(+p.rotate) ? +p.rotate : 0; if (rot) rotateDoc(rot);
@@ -1115,13 +955,6 @@ async function applyPlan(p) {
     for (const [k, v] of Object.entries(p.adjustments)) if (k in DEF && typeof v === "number" && isFinite(v)) { const [mn, mx] = rng(k); S.adj[k] = Math.round(Math.max(mn, Math.min(mx, v))); }
   }
   syncAdj();
-  if (p.layer && Array.isArray(p.layer.ops) && p.layer.ops.length) {
-    const l = makeLayer(String(p.layer.name || "AI layer").slice(0, 40));
-    if (BLENDS.some(b => b[0] === p.layer.blend)) l.blend = p.layer.blend;
-    if (typeof p.layer.opacity === "number") l.opacity = Math.max(0, Math.min(1, p.layer.opacity));
-    await drawOps(l.canvas.getContext("2d"), p.layer.ops);
-    S.layers.push(l); S.active = l.id;
-  }
   if (p.removeBackground) {
     const target = S.layers.find(l => l.visible) || S.layers[0];
     const res = target && FastAI.removeBackground(target.canvas);
@@ -1141,151 +974,19 @@ async function applyPlan(p) {
   renderLayers(); render();
   return extra;
 }
-async function drawOps(x, ops) {
-  const W = S.w, H = S.h, num = (v, d) => (typeof v === "number" && isFinite(v) ? v : d);
-  const fams = new Set(ops.filter(o => o?.type === "text").map(o => FONTS[o.font] || FONTS.sans));
-  for (const f of fams) { try { await document.fonts.load(`600 40px ${f}`); } catch {} }
-  for (const o of ops.slice(0, 200)) {
-    if (!o || typeof o !== "object") continue;
-    try {
-      x.save(); x.globalAlpha = Math.max(0, Math.min(1, num(o.opacity, 1)));
-      const paint = () => { if (o.fill) { x.fillStyle = o.fill; x.fill(); } if (o.stroke) { x.strokeStyle = o.stroke; x.lineWidth = Math.max(1, num(o.lineWidth, 0.004) * W); x.lineCap = x.lineJoin = "round"; x.stroke(); } };
-      if (o.type === "text") {
-        drawTextOp(x, { text: o.text ?? "", x: num(o.x, 0.5) * W, y: num(o.y, 0.5) * H, sizePx: Math.max(4, num(o.size, 0.05) * W), color: o.color || "#fff", family: FONTS[o.font] || FONTS.sans, weight: num(o.weight, 600), align: ["left", "center", "right"].includes(o.align) ? o.align : "center", maxWidthPx: o.maxWidth ? o.maxWidth * W : 0, shadow: !!o.shadow, stroke: o.stroke || null });
-      } else if (o.type === "rect") {
-        x.beginPath(); const rx = num(o.x, 0) * W, ry = num(o.y, 0) * H, rw = num(o.w, 1) * W, rh = num(o.h, 1) * H, rr = num(o.radius, 0) * W;
-        if (rr > 0 && x.roundRect) x.roundRect(rx, ry, rw, rh, rr); else x.rect(rx, ry, rw, rh); paint();
-      } else if (o.type === "ellipse") {
-        x.beginPath(); x.ellipse(num(o.cx, 0.5) * W, num(o.cy, 0.5) * H, Math.abs(num(o.rx, 0.1) * W), Math.abs(num(o.ry, 0.1) * H), 0, 0, Math.PI * 2); paint();
-      } else if (o.type === "path" && Array.isArray(o.points) && o.points.length > 1) {
-        const pts = o.points.map(p => [num(p?.[0], 0) * W, num(p?.[1], 0) * H]);
-        x.beginPath(); x.moveTo(pts[0][0], pts[0][1]);
-        if (o.smooth && pts.length > 2) { for (let i = 1; i < pts.length - 1; i++) x.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2); const l = pts[pts.length - 1]; x.lineTo(l[0], l[1]); }
-        else for (const p of pts.slice(1)) x.lineTo(p[0], p[1]);
-        if (o.closed) x.closePath(); paint();
-      } else if (o.type === "gradient" && Array.isArray(o.stops)) {
-        const g = o.kind === "radial" ? x.createRadialGradient(num(o.x0, 0.5) * W, num(o.y0, 0.5) * H, 0, num(o.x0, 0.5) * W, num(o.y0, 0.5) * H, Math.max(1, num(o.r, 0.5) * W))
-          : x.createLinearGradient(num(o.x0, 0) * W, num(o.y0, 0) * H, num(o.x1, 1) * W, num(o.y1, 1) * H);
-        for (const s of o.stops) { try { g.addColorStop(Math.max(0, Math.min(1, num(s?.[0], 0))), s?.[1]); } catch {} }
-        x.fillStyle = g; x.fillRect(0, 0, W, H);
-      }
-    } catch {} finally { x.restore(); }
-  }
+/* ---------- Fast Edit AI status ---------- */
+function renderAIStatus(pct) {
+  const sub = $("#agentSub"), dot = $("#agentDot");
+  if (FastAI.ready) { sub.textContent = `Ready · on your device · ${Math.round(FastAI.stats.params / 1000)}k parameters`; dot.className = "agentdot ok"; if (!busy) setStatus("Ready. Describe an edit, or pick a suggestion below."); }
+  else { sub.textContent = `Training on your device… ${Math.round((pct || 0) * 100)}%`; dot.className = "agentdot"; setStatus("Fast Edit AI is training on your device. It takes a couple of seconds."); }
 }
-async function svgToLayer(svg, name) {
-  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
-  const root = doc.documentElement;
-  if (!root || root.nodeName.toLowerCase() !== "svg" || doc.querySelector("parsererror")) throw new Error("the artwork came back malformed");
-  root.querySelectorAll("script, foreignObject, image, use[href^='http'], a").forEach(n => n.remove());
-  for (const el of root.querySelectorAll("*")) for (const at of [...el.attributes]) if (/^on/i.test(at.name) || /^\s*(javascript|https?):/i.test(at.value)) el.removeAttribute(at.name);
-  if (!root.getAttribute("viewBox")) root.setAttribute("viewBox", `0 0 ${S.w} ${S.h}`);
-  root.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  root.setAttribute("width", S.w); root.setAttribute("height", S.h);
-  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(root)], { type: "image/svg+xml" }));
-  try {
-    const img = new Image(); img.width = S.w; img.height = S.h; img.src = url; await img.decode();
-    const l = makeLayer(String(name).slice(0, 40)); l.canvas.getContext("2d").drawImage(img, 0, 0, S.w, S.h); return l;
-  } finally { URL.revokeObjectURL(url); }
-}
-
-/* ---------- Agent connection ---------- */
-const AGENT_KEY = "fastedit.agent.v2";
-const PROVIDER_NAMES = { builtin: "Fast Edit AI", webhook: "Your agent" };
-let agent = { provider: "builtin", url: "", token: "" };
-try { Object.assign(agent, JSON.parse(localStorage.getItem(AGENT_KEY) || "{}")); } catch {}
-if (!PROVIDER_NAMES[agent.provider]) agent.provider = "builtin";
-const saveAgent = () => { try { localStorage.setItem(AGENT_KEY, JSON.stringify(agent)); } catch {} };
-const agentLabel = () => PROVIDER_NAMES[agent.provider] || "AI";
-let trainPct = 0;
-function agentReady() { return agent.provider === "builtin" ? true : /^https?:\/\//i.test(agent.url); }
-const agentSendsImages = () => true;
-function renderAgent() {
-  $("#agentName").textContent = agentLabel();
-  const sub = $("#agentSub"), dot = $("#agentDot"), ok = agentReady();
-  let msg;
-  if (agent.provider === "builtin") {
-    if (FastAI.ready) { const st = FastAI.stats; msg = `Ready · on-device · ${Math.round(st.params / 1000)}k parameters`; dot.className = "agentdot ok"; }
-    else { msg = `Training on your device… ${Math.round(trainPct * 100)}%`; dot.className = "agentdot"; }
-  } else { msg = ok ? "Ready · " + new URL(agent.url).host : "Add your agent's URL."; dot.className = "agentdot " + (ok ? "ok" : "bad"); }
-  sub.textContent = msg;
-  if (!busy) setStatus(ok ? (agent.provider === "builtin" && !FastAI.ready ? "Fast Edit AI is training on your device. It takes a couple of seconds." : "Ready. Describe an edit, or pick a suggestion below.") : "Add your agent's URL under Connect agent, or switch back to Fast Edit AI.", !ok);
-}
-
-const blobToB64 = (b) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = no; r.readAsDataURL(b); });
-function parseLoose(text) {
-  if (text && typeof text === "object") return text;
-  const t = String(text ?? "").trim();
-  try { return JSON.parse(t); } catch {}
-  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fence) { try { return JSON.parse(fence[1]); } catch {} }
-  const a = t.search(/[\[{]/), b = Math.max(t.lastIndexOf("}"), t.lastIndexOf("]"));
-  if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch {} }
-  throw { code: "invalid_json", text: t };
-}
-async function postJSON(url, body, headers, signal) {
-  let r;
-  try { r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body), signal }); }
-  catch (e) { throw e?.name === "AbortError" ? { code: "cancelled" } : { code: "network" }; }
-  const ct = r.headers.get("content-type") || "";
-  const data = ct.includes("json") ? await r.json().catch(() => null) : await r.text();
-  if (!r.ok) throw { code: (data && data.code) || (r.status === 429 ? "rate_limited" : "agent_error"), message: (data && (data.error || data.message)) || `The agent answered ${r.status}.` };
-  return data;
-}
-async function callAI(prompt, opts = {}) {
-  const { signal, images, task = "edit" } = opts;
-  const img = images?.[0] ? { media_type: images[0].type || "image/jpeg", data: await blobToB64(images[0]) } : null;
-  const headers = agent.token ? { authorization: "Bearer " + agent.token } : {};
-  const d = await postJSON(agent.url, { protocol: "fastedit.agent/v1", task, prompt, image: img }, headers, signal);
-  if (typeof d === "string") return d;
-  if (d && typeof d === "object") { for (const k of ["text", "output", "result", "content"]) if (typeof d[k] === "string") return d[k]; return d; }
-  throw { code: "agent_error", message: "Your agent's reply was empty." };
-}
-const aiJSON = async (prompt, opts) => parseLoose(await callAI(prompt, opts));
-
-/* Dialog */
-const dlg = $("#agentDlg");
-function openAgentDialog() {
-  $$('input[name="provider"]').forEach(r => r.checked = r.value === agent.provider);
-  $("#agentUrl").value = agent.url; $("#agentToken").value = agent.token;
-  $("#testResult").textContent = "";
-  if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
-}
-function readDialog() {
-  return { provider: ($('input[name="provider"]:checked') || {}).value || "builtin", url: $("#agentUrl").value.trim(), token: $("#agentToken").value.trim() };
-}
-$("#btnAgent").onclick = openAgentDialog;
-dlg.addEventListener("close", () => {
-  if (dlg.returnValue !== "save") return;
-  agent = readDialog(); saveAgent(); renderAgent(); toast("AI agent: " + agentLabel());
-});
-$("#agentTest").onclick = async () => {
-  const cfg = readDialog(), out = $("#testResult"); out.style.color = "";
-  if (cfg.provider === "builtin") {
-    out.textContent = "Testing…";
-    await FastAI.train();
-    const top = FastAI.classify("make it warmer")[0];
-    out.textContent = `Working. Understood “make it warmer” as ${top.intent} (${Math.round(top.p * 100)}% sure).`; out.style.color = "var(--ok)";
-    return;
-  }
-  const prev = agent; agent = cfg;
-  if (!agentReady()) { out.textContent = "Enter your agent's URL first."; agent = prev; return; }
-  out.textContent = "Testing…";
-  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 60000);
-  try {
-    const r = await aiJSON('Connection test from Fast Edit. Reply with only this JSON: {"ok": true}', { signal: ctl.signal, task: "ping" });
-    out.textContent = r && r.ok ? "Connected. The agent answered." : "The agent answered, but not with the expected JSON.";
-    out.style.color = r && r.ok ? "var(--ok)" : "var(--accent)";
-  } catch (e) { out.textContent = ERR[e?.code] || e?.message || "Couldn't connect."; out.style.color = "var(--danger)"; }
-  finally { clearTimeout(t); agent = prev; }
-};
-
-function initAgents() {
-  renderAgent();
-  FastAI.train((p) => { trainPct = p; if (agent.provider === "builtin") renderAgent(); }).then((st) => {
+function initAI() {
+  renderAIStatus(0);
+  FastAI.train(renderAIStatus).then((st) => {
     $("#statIntents").textContent = st.intents;
     $("#statParams").textContent = st.params.toLocaleString();
     $("#statTrain").textContent = `${st.examples.toLocaleString()} examples, ${st.epochs} passes, ${(st.ms / 1000).toFixed(1)} s on this device, ${Math.round(st.accuracy * 100)}% training accuracy`;
-    renderAgent();
+    renderAIStatus(1);
   });
 }
 
@@ -1299,7 +1000,7 @@ setTool("brush");
   sizeDoc(); syncAdj(); renderLayers(); updUndo();
   requestAnimationFrame(() => { zoomFit(); doRender(); });
   window.addEventListener("resize", () => { clearTimeout(window.__rz); window.__rz = setTimeout(zoomFit, 120); });
-  initAgents();
+  initAI();
 })();
 })();
 </script>

@@ -1,6 +1,6 @@
 # Fast Edit
 
-A layer-based photo editor that runs in the browser, with **its own AI, built from scratch**. Fast Edit AI runs entirely on your device: there's no account and no API key, and your photos never leave your computer. You can also connect your own agent.
+A layer-based photo editor that runs in the browser, with **its own AI, built from scratch**. Fast Edit AI runs entirely on your device: there's no account and no API key, and your photos never leave your computer.
 
 ## Fast Edit AI
 
@@ -22,22 +22,6 @@ Try: `warmer with a soft vignette`, `cinematic teal & orange, crop to 16:9`, `ad
 - **Tools:** brush, eraser, text, eyedropper, crop, rotate, flip, move, pan
 - **Adjustments:** 16 sliders plus presets and a before/after compare
 - **Files:** open, drag in or paste images; export PNG, JPEG or WebP; 30-step undo
-
-## Connect your own agent
-
-**Connect agent** → **Your own agent** sends requests to any HTTPS endpoint:
-
-```http
-POST <your agent URL>
-Authorization: Bearer <token>        # only if you set one
-Content-Type: application/json
-
-{ "protocol": "fastedit.agent/v1", "task": "edit" | "art" | "critique" | "ping",
-  "prompt": "<instructions, including the JSON shape Fast Edit expects back>",
-  "image": { "media_type": "image/jpeg", "data": "<base64>" } | null }
-```
-
-Reply `200` with `{ "text": "<reply containing the JSON>" }` or with the JSON object itself. The endpoint must send CORS headers allowing the Fast Edit origin.
 
 ## Deploy
 
