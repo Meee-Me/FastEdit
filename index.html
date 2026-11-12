@@ -1,0 +1,1290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fast Edit</title>
+<meta name="description" content="Fast Edit is a layer-based photo editor in your browser with an AI tool. Use the built-in AI, your own Anthropic key, or connect your own agent.">
+<meta name="theme-color" content="#15171b">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2315171b'/%3E%3Cpath d='M18 4 8 18h7l-2 10 11-15h-7z' fill='%23f0a43a'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Playfair+Display:wght@500;700&family=Caveat:wght@600&display=swap">
+<style>
+/* Layout: darkroom editor — tool rail | neutral stage | inspector panel; stacks on phones. Single deliberate dark look: neutral greys keep color judgement honest, amber is the safelight. */
+:root {
+  --bg: #15171b;
+  --stage: #0f1013;
+  --panel: #1d2026;
+  --panel-2: #262a31;
+  --line: #333843;
+  --fg: #e7e9ee;
+  --muted: #8e95a4;
+  --accent: #f0a43a;
+  --accent-ink: #1b1306;
+  --danger: #ec6b5e;
+  --ok: #6fcf97;
+  --font-display: "Bricolage Grotesque", "IBM Plex Sans", system-ui, sans-serif;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; -webkit-font-smoothing: antialiased; }
+img { max-width: 100%; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 13px; overflow: hidden; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 340px;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "top top top" "rail stage panel";
+  gap: 8px;
+  padding-block: 8px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* Top bar */
+.top { grid-area: top; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; position: relative; }
+.brand { font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; margin-right: 4px; }
+.brand b { color: var(--accent); font-weight: 700; }
+.brand .mark { width: 24px; height: 24px; border-radius: 7px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; box-shadow: 0 0 14px rgba(240,164,58,.35); }
+.brand .mark svg { width: 16px; height: 16px; }
+.grp { display: flex; align-items: center; gap: 4px; }
+.btn { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; line-height: 1.1; white-space: nowrap; }
+.btn:hover { border-color: #4a5160; }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.ghost { background: transparent; }
+.btn.sm { padding: 4px 8px; font-size: 12px; }
+.docinfo { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.spacer { flex: 1; }
+#zoomVal { font-family: var(--font-mono); font-size: 12px; min-width: 48px; text-align: center; font-variant-numeric: tabular-nums; }
+.pop { position: absolute; top: 100%; z-index: 30; margin-top: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.5); display: grid; gap: 8px; min-width: 220px; }
+.pop h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.pop .row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Rail */
+.rail { grid-area: rail; display: flex; flex-direction: column; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px; align-items: center; }
+.tool { width: 38px; height: 38px; border-radius: 7px; border: 1px solid transparent; background: transparent; display: grid; place-items: center; color: var(--muted); }
+.tool svg { width: 20px; height: 20px; }
+.tool:hover { color: var(--fg); background: var(--panel-2); }
+.tool[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); }
+.rail .sep { width: 24px; height: 1px; background: var(--line); margin: 4px 0; }
+.swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); padding: 0; overflow: hidden; position: relative; }
+.swatch input { position: absolute; inset: -8px; width: 50px; height: 50px; border: 0; padding: 0; cursor: pointer; background: none; }
+
+/* Stage */
+.stagecol { grid-area: stage; display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
+.opts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 7px 12px; min-height: 42px; }
+.opt { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.opt output { font-family: var(--font-mono); color: var(--fg); min-width: 38px; font-variant-numeric: tabular-nums; }
+.opt input[type=range] { width: 110px; }
+.opt input[type=text] { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; width: 180px; }
+.opt select { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+.hint { color: var(--muted); font-size: 12px; }
+.stage { flex: 1; min-height: 0; position: relative; display: flex; overflow: auto; background: var(--stage); border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
+.wrap { margin: auto; flex: none; position: relative; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,.6); background-color: #2a2d33; background-image: linear-gradient(45deg, #3a3e46 25%, transparent 25%), linear-gradient(-45deg, #3a3e46 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #3a3e46 75%), linear-gradient(-45deg, transparent 75%, #3a3e46 75%); background-size: 16px 16px; background-position: 0 0, 0 8px, 8px -8px, -8px 0; }
+.wrap canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+#cropBox { position: absolute; border: 1px solid #fff; box-shadow: 0 0 0 9999px rgba(0,0,0,.55); pointer-events: none; background-image: linear-gradient(to right, transparent 33.2%, rgba(255,255,255,.35) 33.3%, transparent 33.5%, transparent 66.5%, rgba(255,255,255,.35) 66.6%, transparent 66.8%), linear-gradient(to bottom, transparent 33.2%, rgba(255,255,255,.35) 33.3%, transparent 33.5%, transparent 66.5%, rgba(255,255,255,.35) 66.6%, transparent 66.8%); }
+.drop { position: absolute; inset: 8px; border: 2px dashed var(--accent); border-radius: 10px; display: grid; place-items: center; font-size: 16px; color: var(--accent); background: rgba(15,16,19,.85); pointer-events: none; }
+.busy-veil { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); background: rgba(20,22,26,.92); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 12px; display: flex; gap: 8px; align-items: center; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+
+/* Panel */
+.panel { grid-area: panel; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; min-height: 0; overflow: hidden; }
+.tabs { display: flex; border-bottom: 1px solid var(--line); }
+.tabs button { flex: 1; background: none; border: 0; border-bottom: 2px solid transparent; padding: 11px 6px 9px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tabpane { flex: 1; overflow: auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 3px; }
+.seg button { border: 0; background: transparent; padding: 6px 4px; border-radius: 6px; color: var(--muted); font-weight: 500; }
+.seg button[aria-pressed="true"] { background: var(--bg); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); }
+textarea#aiPrompt { width: 100%; min-height: 82px; resize: vertical; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; line-height: 1.45; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 5px 10px; font-size: 12px; color: var(--fg); }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.ai-actions { display: flex; gap: 8px; align-items: center; }
+.ai-actions .btn.primary { flex: 1; padding: 9px; }
+.ai-status { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.ai-status.warn { color: var(--danger); }
+.log { display: flex; flex-direction: column; gap: 8px; }
+.entry { border-radius: 8px; padding: 9px 11px; line-height: 1.45; font-size: 12.5px; }
+.entry.you { background: var(--panel-2); align-self: flex-end; max-width: 90%; }
+.entry.ai { border: 1px solid var(--line); }
+.entry.ai .who { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 600; margin-bottom: 3px; }
+.entry.err { border: 1px solid rgba(236,107,94,.5); color: var(--danger); }
+.entry .chips { margin-top: 8px; }
+.empty-log { color: var(--muted); font-size: 12px; line-height: 1.5; border: 1px dashed var(--line); border-radius: 8px; padding: 10px 12px; }
+
+.adj-group { display: grid; gap: 9px; }
+.adj { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+.adj label { color: var(--fg); font-size: 12.5px; }
+.adj output { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.adj output.on { color: var(--accent); }
+.adj input { grid-column: 1 / -1; width: 100%; }
+input[type=range] { accent-color: var(--accent); height: 18px; }
+
+.layers { display: flex; flex-direction: column; gap: 4px; }
+.layer { display: grid; grid-template-columns: 26px 46px 1fr; gap: 8px; align-items: center; padding: 6px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+.layer:hover { background: var(--panel-2); }
+.layer.active { border-color: var(--accent); background: var(--panel-2); }
+.layer .eye { width: 26px; height: 26px; border: 0; background: none; color: var(--muted); display: grid; place-items: center; padding: 0; }
+.layer .eye svg { width: 16px; height: 16px; }
+.layer.hidden-layer .name { color: var(--muted); text-decoration: line-through; }
+.layer canvas { width: 46px; height: 34px; object-fit: contain; border-radius: 3px; background: repeating-conic-gradient(#3a3e46 0 25%, #2a2d33 0 50%) 0 0 / 8px 8px; }
+.layer .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.layer .meta { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
+.layer-ctl { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.layer-ctl .line { display: flex; gap: 8px; align-items: center; }
+.layer-ctl .line > span { width: 64px; color: var(--muted); font-size: 12px; }
+.layer-ctl input[type=range] { flex: 1; }
+.layer-ctl input[type=text], .layer-ctl select { flex: 1; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; min-width: 0; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.agentbar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.agentbar .who { flex: 1; min-width: 0; }
+.agentbar .who b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agentbar .who span { font-size: 11.5px; color: var(--muted); }
+.agentdot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+.agentdot.ok { background: var(--ok); } .agentdot.bad { background: var(--danger); }
+dialog#agentDlg { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(560px, calc(100% - 32px)); max-height: calc(100% - 32px); box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+dialog#agentDlg::backdrop { background: rgba(5,6,8,.65); }
+.dlg-head { padding: 18px 20px 6px; }
+.dlg-head h2 { margin: 0 0 4px; font-family: var(--font-display); font-size: 20px; }
+.dlg-head p { margin: 0; color: var(--muted); line-height: 1.5; }
+.dlg-body { padding: 12px 20px; display: grid; gap: 10px; }
+.prov { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; }
+.prov:has(input[type=radio]:checked) { border-color: var(--accent); background: rgba(240,164,58,.06); }
+.prov > label { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; cursor: pointer; }
+.prov > label input { margin: 3px 0 0; accent-color: var(--accent); grid-row: span 2; }
+.prov > label b { font-weight: 600; }
+.prov > label span { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.prov .fields { display: grid; gap: 8px; padding-left: 24px; }
+.prov:not(:has(input[type=radio]:checked)) .fields { display: none; }
+.field { display: grid; gap: 4px; }
+.field label { font-size: 12px; color: var(--muted); }
+.field input { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; width: 100%; }
+.note { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+details.proto summary { cursor: pointer; font-size: 12px; color: var(--accent); }
+details.proto pre { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px; overflow-x: auto; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; margin: 8px 0 0; }
+.dlg-foot { display: flex; gap: 8px; align-items: center; padding: 12px 20px 18px; flex-wrap: wrap; }
+.dlg-foot #testResult { flex: 1; min-width: 160px; font-size: 12px; color: var(--muted); }
+#toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-weight: 500; z-index: 50; max-width: calc(100% - 32px); }
+
+@media (max-width: 900px) {
+  body { overflow: auto; }
+  .app { height: auto; min-height: 100%; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; grid-template-areas: "top" "stage" "rail" "panel"; }
+  .stagecol { height: 62vh; min-height: 360px; }
+  .rail { flex-direction: row; flex-wrap: wrap; justify-content: center; }
+  .rail .sep { width: 1px; height: 24px; margin: 0 4px; }
+  .panel { min-height: 420px; }
+  .stage { padding: 12px; }
+  .pop { left: 0; right: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13.5 2 5 13.5h5.5L9 22l9.5-12.5H13z" fill="currentColor"/></svg></span>Fast <b>Edit</b></div>
+    <div class="grp">
+      <button class="btn" id="btnOpen">Open</button>
+      <input type="file" id="fileIn" accept="image/*" hidden>
+      <button class="btn" id="btnNew">New</button>
+      <button class="btn ghost" id="btnUndo" title="Undo (Ctrl+Z)">Undo</button>
+      <button class="btn ghost" id="btnRedo" title="Redo (Ctrl+Shift+Z)">Redo</button>
+    </div>
+    <div class="docinfo" id="docInfo"></div>
+    <div class="spacer"></div>
+    <div class="grp">
+      <button class="btn ghost" id="btnCompare" title="Press and hold to see the image without adjustments">Hold: before</button>
+      <button class="btn ghost sm" id="zoomOut" aria-label="Zoom out">−</button>
+      <span id="zoomVal">100%</span>
+      <button class="btn ghost sm" id="zoomIn" aria-label="Zoom in">+</button>
+      <button class="btn ghost sm" id="zoomFit">Fit</button>
+    </div>
+    <button class="btn primary" id="btnExport">Export</button>
+
+    <div class="pop" id="newPop" hidden style="left:120px">
+      <h4>New blank canvas</h4>
+      <div class="row">
+        <button class="btn sm" data-new="1080x1080">Square 1080</button>
+        <button class="btn sm" data-new="1080x1350">Portrait 4:5</button>
+        <button class="btn sm" data-new="1920x1080">HD 16:9</button>
+        <button class="btn sm" data-new="1500x500">Banner 3:1</button>
+      </div>
+      <h4>Background</h4>
+      <div class="row">
+        <button class="btn sm" data-bg="#ffffff" aria-pressed="true">White</button>
+        <button class="btn sm" data-bg="#111111">Black</button>
+        <button class="btn sm" data-bg="transparent">Transparent</button>
+      </div>
+    </div>
+    <div class="pop" id="exportPop" hidden style="right:0">
+      <h4>Export flattened image</h4>
+      <div class="row">
+        <button class="btn sm" data-export="png">PNG</button>
+        <button class="btn sm" data-export="jpeg">JPEG (92%)</button>
+        <button class="btn sm" data-export="webp">WebP</button>
+      </div>
+      <div class="hint" id="exportHint"></div>
+    </div>
+  </header>
+
+  <nav class="rail" id="rail" aria-label="Tools">
+    <button class="tool" data-tool="move" title="Move layer (V)" aria-label="Move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></button>
+    <button class="tool" data-tool="brush" title="Brush (B)" aria-label="Brush"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4.5l5 5L10 19l-5-5z"/><path d="M5 14c-2 1-2 4-3 6 2-1 5-1 6-3"/></svg></button>
+    <button class="tool" data-tool="eraser" title="Eraser (E)" aria-label="Eraser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20h12M4.5 15.5l9-9a2 2 0 012.8 0l2.2 2.2a2 2 0 010 2.8L11 19H8z"/><path d="M9 11l5 5"/></svg></button>
+    <button class="tool" data-tool="text" title="Text (T)" aria-label="Text"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></svg></button>
+    <button class="tool" data-tool="eyedropper" title="Eyedropper (I)" aria-label="Eyedropper"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 6l4 4M4 20l2-1 9.5-9.5-3-3L3 16z"/><path d="M15 3.5a2.1 2.1 0 013 0l2.5 2.5a2.1 2.1 0 010 3L19 10.5 13.5 5z"/></svg></button>
+    <button class="tool" data-tool="crop" title="Crop (C)" aria-label="Crop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 2v16h16M2 6h16v16"/></svg></button>
+    <button class="tool" data-tool="hand" title="Pan (H)" aria-label="Pan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 11V5a1.5 1.5 0 013 0v5M11 10V3.5a1.5 1.5 0 013 0V10M14 10V5a1.5 1.5 0 013 0v7M8 11a1.5 1.5 0 00-3 0v2c0 4 3 8 7 8h1c3 0 5-3 5-6v-3"/></svg></button>
+    <div class="sep"></div>
+    <label class="swatch" id="swatch" title="Color"><input type="color" id="color" value="#f0a43a" aria-label="Paint color"></label>
+  </nav>
+
+  <section class="stagecol">
+    <div class="opts" id="opts">
+      <div class="opt" data-for="brush eraser"><span>Size</span><input type="range" id="optSize" min="1" max="400" value="40"><output id="optSizeV">40px</output></div>
+      <div class="opt" data-for="brush eraser"><span>Opacity</span><input type="range" id="optOpacity" min="1" max="100" value="100"><output id="optOpacityV">100%</output></div>
+      <div class="opt" data-for="brush eraser"><span>Softness</span><input type="range" id="optSoft" min="0" max="100" value="20"><output id="optSoftV">20%</output></div>
+      <div class="opt" data-for="text"><span>Text</span><input type="text" id="optText" value="Fast Edit"></div>
+      <div class="opt" data-for="text"><span>Font</span><select id="optFont"><option value="sans">Plex Sans</option><option value="display">Bricolage</option><option value="serif">Playfair</option><option value="mono">Plex Mono</option><option value="script">Caveat</option></select></div>
+      <div class="opt" data-for="text"><span>Size</span><input type="range" id="optTextSize" min="8" max="400" value="96"><output id="optTextSizeV">96px</output></div>
+      <div class="hint" data-for="text">Click the image to place text on a new layer.</div>
+      <div class="hint" data-for="move">Drag to move the active layer.</div>
+      <div class="hint" data-for="eyedropper">Click the image to pick a color. <span id="pickedHex" style="font-family:var(--font-mono)"></span></div>
+      <div class="hint" data-for="hand">Drag to pan. Ctrl + scroll zooms.</div>
+      <div class="opt" data-for="crop"><span>Ratio</span><select id="cropRatio"><option value="0">Free</option><option value="1">1:1</option><option value="0.8">4:5</option><option value="1.5">3:2</option><option value="1.7778">16:9</option><option value="0.5625">9:16</option></select></div>
+      <div class="grp" data-for="crop"><button class="btn sm primary" id="cropApply" disabled>Apply crop</button><button class="btn sm" id="cropCancel">Clear</button></div>
+      <div class="grp" data-for="crop"><button class="btn sm" id="rotL" title="Rotate left">⟲ 90°</button><button class="btn sm" id="rotR" title="Rotate right">⟳ 90°</button><button class="btn sm" id="flipH">Flip H</button><button class="btn sm" id="flipV">Flip V</button></div>
+    </div>
+    <div class="stage" id="stage">
+      <div class="wrap" id="wrap"><canvas id="view"></canvas><div id="cropBox" hidden></div></div>
+      <div class="drop" id="dropHint" hidden>Drop an image to open it</div>
+      <div class="busy-veil" id="busyVeil" hidden><span class="dot"></span><span id="busyText">Looking at your image…</span><button class="btn sm" id="aiStop2">Stop</button></div>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="t-ai" aria-selected="true" data-tab="ai">AI</button>
+      <button role="tab" id="t-adjust" aria-selected="false" data-tab="adjust">Adjust</button>
+      <button role="tab" id="t-layers" aria-selected="false" data-tab="layers">Layers</button>
+    </div>
+
+    <div class="tabpane" id="pane-ai">
+      <div class="agentbar">
+        <span class="agentdot" id="agentDot"></span>
+        <div class="who"><b id="agentName">Fast Edit AI</b><span id="agentSub">Checking…</span></div>
+        <button class="btn sm" id="btnAgent">Connect agent</button>
+      </div>
+      <div class="seg" role="group" aria-label="AI mode">
+        <button data-mode="edit" aria-pressed="true">Edit photo</button>
+        <button data-mode="art" aria-pressed="false">Generate art</button>
+        <button data-mode="critique" aria-pressed="false">Critique</button>
+      </div>
+      <textarea id="aiPrompt" placeholder="Describe an edit, e.g. “warm golden-hour light, lift the shadows and add a subtle vignette”"></textarea>
+      <div class="ai-actions">
+        <button class="btn primary" id="aiGo">Apply with AI</button>
+        <button class="btn" id="aiStop" hidden>Stop</button>
+      </div>
+      <div class="chips" id="aiChips"></div>
+      <div class="ai-status" id="aiStatus">Checking AI connection…</div>
+      <div class="label">History</div>
+      <div class="log" id="aiLog"><div class="empty-log">The AI sees the current image and answers with real edits: adjustments, crops, rotations, text, shapes, glows and generated artwork on new layers. Every AI edit is one Undo step.</div></div>
+    </div>
+
+    <div class="tabpane" id="pane-adjust" hidden>
+      <div class="chips" id="presetChips"></div>
+      <div id="adjGroups" style="display:grid;gap:18px"></div>
+      <button class="btn" id="adjReset">Reset all adjustments</button>
+      <div class="hint">Adjustments apply to the whole image, above all layers. Double-click a slider to reset it.</div>
+    </div>
+
+    <div class="tabpane" id="pane-layers" hidden>
+      <div class="btnrow">
+        <button class="btn sm" id="lyNew">New layer</button>
+        <button class="btn sm" id="lyPlace">Place image</button>
+        <input type="file" id="placeIn" accept="image/*" hidden>
+        <button class="btn sm" id="lyDup">Duplicate</button>
+        <button class="btn sm" id="lyMerge">Merge down</button>
+      </div>
+      <div class="layers" id="layerList"></div>
+      <div class="layer-ctl" id="layerCtl">
+        <div class="line"><span>Name</span><input type="text" id="lyName"></div>
+        <div class="line"><span>Opacity</span><input type="range" id="lyOpacity" min="0" max="100"><output id="lyOpacityV" class="docinfo"></output></div>
+        <div class="line"><span>Blend</span><select id="lyBlend"></select></div>
+        <div class="btnrow">
+          <button class="btn sm" id="lyUp">Move up</button>
+          <button class="btn sm" id="lyDown">Move down</button>
+          <button class="btn sm" id="lyFill">Fill with color</button>
+          <button class="btn sm" id="lyClear">Clear</button>
+          <button class="btn sm" id="lyDel" style="color:var(--danger)">Delete</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+<dialog id="agentDlg" aria-labelledby="agentDlgTitle">
+  <form method="dialog" id="agentForm">
+    <div class="dlg-head">
+      <h2 id="agentDlgTitle">Connect your agent</h2>
+      <p>Choose which AI powers Fast Edit's AI tool. Your choice and keys stay in this browser.</p>
+    </div>
+    <div class="dlg-body">
+      <div class="prov">
+        <label><input type="radio" name="provider" value="builtin"><b>Fast Edit AI (built in)</b><span id="builtinDesc">Claude, run by this Fast Edit deployment.</span></label>
+        <div class="fields" id="accessField" hidden>
+          <div class="field"><label for="accessCode">Access code</label><input id="accessCode" type="password" autocomplete="off" placeholder="Ask the site owner for the code"></div>
+        </div>
+      </div>
+      <div class="prov">
+        <label><input type="radio" name="provider" value="anthropic"><b>Your Anthropic API key</b><span>Use Claude on your own account. Get a key at console.anthropic.com.</span></label>
+        <div class="fields">
+          <div class="field"><label for="anthropicKey">API key</label><input id="anthropicKey" type="password" autocomplete="off" placeholder="sk-ant-…"></div>
+          <div class="note">Saved only in this browser. Each request passes it through this site's server to Anthropic; the server never stores it.</div>
+        </div>
+      </div>
+      <div class="prov">
+        <label><input type="radio" name="provider" value="webhook"><b>Your own agent</b><span>Any HTTPS endpoint that speaks the Fast Edit agent protocol: your server, an automation tool, or a local agent.</span></label>
+        <div class="fields">
+          <div class="field"><label for="agentUrl">Agent URL</label><input id="agentUrl" type="url" placeholder="https://my-agent.example.com/fastedit"></div>
+          <div class="field"><label for="agentToken">Bearer token (optional)</label><input id="agentToken" type="password" autocomplete="off"></div>
+          <div class="note">Your endpoint must allow cross-origin requests (CORS) from this site.</div>
+          <details class="proto"><summary>Agent protocol</summary><pre>POST &lt;Agent URL&gt;
+Authorization: Bearer &lt;token&gt;   (if set)
+Content-Type: application/json
+
+{
+  "protocol": "fastedit.agent/v1",
+  "task": "edit" | "art" | "critique" | "ping",
+  "prompt": "full instructions, including the JSON
+             shape Fast Edit expects back",
+  "image": { "media_type": "image/jpeg",
+             "data": "&lt;base64&gt;" } | null
+}
+
+Reply 200 with JSON:
+{ "text": "&lt;the model's reply, a JSON string&gt;" }
+or the requested JSON object itself.
+Errors: non-2xx with { "error": "message" }.</pre></details>
+        </div>
+      </div>
+      <div class="prov" id="claudeProv" hidden>
+        <label><input type="radio" name="provider" value="claude"><b>Claude on claude.ai</b><span>Available because this page is open inside claude.ai. Uses your Claude plan.</span></label>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <span id="testResult"></span>
+      <button class="btn" type="button" id="agentTest">Test connection</button>
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" value="save" id="agentSave">Save</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast" hidden></div>
+
+<script>
+(() => {
+"use strict";
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+const MAX_SIDE = 2400;
+
+/* ---------- Adjustment model ---------- */
+const DEF = { exposure:0, contrast:0, highlights:0, shadows:0, fade:0, temperature:0, tint:0, saturation:0, vibrance:0, hue:0, sepia:0, mono:0, vignette:0, grain:0, blur:0, sharpen:0 };
+const RANGE = { hue:[-180,180], fade:[0,100], sepia:[0,100], mono:[0,100], vignette:[0,100], grain:[0,100], blur:[0,100], sharpen:[0,100] };
+const rng = (k) => RANGE[k] || [-100, 100];
+const GROUPS = [
+  ["Light", [["exposure","Exposure"],["contrast","Contrast"],["highlights","Highlights"],["shadows","Shadows"],["fade","Fade"]]],
+  ["Color", [["temperature","Temperature"],["tint","Tint"],["saturation","Saturation"],["vibrance","Vibrance"],["hue","Hue shift"]]],
+  ["Effects", [["vignette","Vignette"],["grain","Grain"],["sharpen","Sharpen"],["blur","Blur"],["sepia","Sepia"],["mono","Black & white"]]],
+];
+const fmtAdj = (k, v) => k === "exposure" ? (v >= 0 ? "+" : "−") + Math.abs(v / 50).toFixed(2) + " EV"
+  : k === "hue" ? (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v) + "°"
+  : rng(k)[0] < 0 ? (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v) : v + "%";
+const PRESETS = {
+  "Warm film": { exposure:6, contrast:12, temperature:28, tint:4, saturation:-8, vibrance:18, fade:22, grain:28, vignette:25 },
+  "Cool matte": { contrast:-8, temperature:-24, tint:-4, saturation:-18, fade:35, shadows:18, highlights:-14 },
+  "Noir": { contrast:42, mono:100, grain:35, vignette:50, highlights:-10, shadows:-12 },
+  "Punchy": { contrast:24, vibrance:38, saturation:8, sharpen:35, shadows:14, highlights:-18 },
+  "Faded sepia": { sepia:70, fade:30, contrast:-6, vignette:30, grain:20 },
+};
+const BLENDS = [["source-over","Normal"],["multiply","Multiply"],["screen","Screen"],["overlay","Overlay"],["soft-light","Soft light"],["hard-light","Hard light"],["darken","Darken"],["lighten","Lighten"],["color-dodge","Color dodge"],["color-burn","Color burn"],["difference","Difference"],["hue","Hue"],["saturation","Saturation"],["color","Color"],["luminosity","Luminosity"]];
+const FONTS = { sans: "'IBM Plex Sans', system-ui, sans-serif", display: "'Bricolage Grotesque', system-ui, sans-serif", serif: "'Playfair Display', Georgia, serif", mono: "'IBM Plex Mono', ui-monospace, monospace", script: "Caveat, 'Comic Sans MS', cursive" };
+
+/* ---------- State ---------- */
+const S = { w: 1600, h: 1067, layers: [], active: null, adj: { ...DEF }, zoom: 1, tool: "brush", comparing: false };
+let uid = 1;
+const view = $("#view"), vctx = view.getContext("2d", { willReadFrequently: true });
+const comp = document.createElement("canvas"), cctx = comp.getContext("2d", { willReadFrequently: true });
+const tmp = document.createElement("canvas"), tctx = tmp.getContext("2d", { willReadFrequently: true });
+const strokeTmp = document.createElement("canvas"), stctx = strokeTmp.getContext("2d");
+
+function mk(w, h) { const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); return c; }
+function clone(c) { const n = mk(c.width, c.height); n.getContext("2d").drawImage(c, 0, 0); return n; }
+const activeLayer = () => S.layers.find(l => l.id === S.active) || null;
+function makeLayer(name, canvas, o = {}) { return { id: uid++, name, canvas: canvas || mk(S.w, S.h), visible: true, opacity: 1, blend: "source-over", x: 0, y: 0, ...o }; }
+function addLayer(layer, select = true) {
+  const i = S.layers.findIndex(l => l.id === S.active);
+  S.layers.splice(i < 0 ? S.layers.length : i + 1, 0, layer);
+  if (select) S.active = layer.id;
+  renderLayers(); render();
+  return layer;
+}
+
+/* ---------- Undo ---------- */
+const undoStack = [], redoStack = [];
+function snap() { return { w: S.w, h: S.h, active: S.active, adj: { ...S.adj }, layers: S.layers.map(l => ({ ...l, canvas: clone(l.canvas) })) }; }
+function pushUndo() { undoStack.push(snap()); if (undoStack.length > 30) undoStack.shift(); redoStack.length = 0; updUndo(); }
+function restore(s) { S.w = s.w; S.h = s.h; S.layers = s.layers; S.active = s.active; S.adj = s.adj; sizeDoc(); syncAdj(); renderLayers(); render(); }
+function doUndo() { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); updUndo(); }
+function doRedo() { if (!redoStack.length) return; undoStack.push(snap()); restore(redoStack.pop()); updUndo(); }
+function updUndo() { $("#btnUndo").disabled = !undoStack.length; $("#btnRedo").disabled = !redoStack.length; }
+
+/* ---------- Rendering ---------- */
+let raf = 0, stroke = null;
+function render() { if (!raf) raf = requestAnimationFrame(doRender); }
+function isDefault(a) { return Object.keys(DEF).every(k => !a[k]); }
+function doRender() {
+  raf = 0;
+  cctx.globalCompositeOperation = "source-over"; cctx.globalAlpha = 1;
+  cctx.clearRect(0, 0, S.w, S.h);
+  for (const l of S.layers) {
+    if (!l.visible || l.opacity <= 0) continue;
+    let src = l.canvas;
+    if (stroke && stroke.layer === l) src = strokePreview(l);
+    cctx.globalAlpha = l.opacity; cctx.globalCompositeOperation = l.blend;
+    cctx.drawImage(src, l.x, l.y);
+  }
+  cctx.globalAlpha = 1; cctx.globalCompositeOperation = "source-over";
+  vctx.clearRect(0, 0, S.w, S.h);
+  if (S.comparing || isDefault(S.adj)) { vctx.drawImage(comp, 0, 0); return; }
+  let srcCtx = cctx;
+  if (S.adj.blur > 0) {
+    tctx.clearRect(0, 0, S.w, S.h);
+    tctx.filter = `blur(${(S.adj.blur / 100) * Math.max(S.w, S.h) * 0.015}px)`;
+    tctx.drawImage(comp, 0, 0); tctx.filter = "none"; srcCtx = tctx;
+  }
+  const img = srcCtx.getImageData(0, 0, S.w, S.h);
+  processPixels(img, S.adj, S.w, S.h);
+  vctx.putImageData(img, 0, 0);
+}
+function hash(i) { let x = Math.imul(i ^ 0x9e3779b9, 0x85ebca6b); x ^= x >>> 13; x = Math.imul(x, 0xc2b2ae35); x ^= x >>> 16; return (x >>> 0) / 4294967296; }
+function processPixels(img, a, w, h) {
+  const d = img.data;
+  const ex = Math.pow(2, a.exposure / 50);
+  const c = a.contrast * 1.28, cf = (259 * (c + 255)) / (255 * (259 - c));
+  const temp = a.temperature * 0.45, tint = a.tint * 0.35;
+  const sh = a.shadows / 100, hi = a.highlights / 100;
+  const sat = 1 + a.saturation / 100, vib = a.vibrance / 100;
+  const fade = a.fade / 100, sep = a.sepia / 100, mono = a.mono / 100;
+  const vig = a.vignette / 100, grain = (a.grain / 100) * 48;
+  let hm = null;
+  if (a.hue) { const r = a.hue * Math.PI / 180, cs = Math.cos(r), sn = Math.sin(r);
+    hm = [0.213+cs*0.787-sn*0.213, 0.715-cs*0.715-sn*0.715, 0.072-cs*0.072+sn*0.928,
+          0.213-cs*0.213+sn*0.143, 0.715+cs*0.285+sn*0.140, 0.072-cs*0.072-sn*0.283,
+          0.213-cs*0.213-sn*0.787, 0.715-cs*0.715+sn*0.715, 0.072+cs*0.928+sn*0.072]; }
+  const cx = w / 2, cy = h / 2, md = Math.hypot(cx, cy);
+  for (let y = 0; y < h; y++) {
+    const dy2 = (y - cy) * (y - cy);
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (d[i + 3] === 0) continue;
+      let r = d[i] * ex, g = d[i + 1] * ex, b = d[i + 2] * ex;
+      if (temp) { r += temp; b -= temp; }
+      if (tint) { g -= tint; r += tint * 0.25; b += tint * 0.25; }
+      if (sh || hi) { let L = (0.299 * r + 0.587 * g + 0.114 * b) / 255; L = L < 0 ? 0 : L > 1 ? 1 : L;
+        const add = sh * (1 - L) * (1 - L) * 110 + hi * L * L * 110; r += add; g += add; b += add; }
+      if (c) { r = (r - 128) * cf + 128; g = (g - 128) * cf + 128; b = (b - 128) * cf + 128; }
+      if (hm) { const r0 = r, g0 = g, b0 = b;
+        r = hm[0]*r0 + hm[1]*g0 + hm[2]*b0; g = hm[3]*r0 + hm[4]*g0 + hm[5]*b0; b = hm[6]*r0 + hm[7]*g0 + hm[8]*b0; }
+      if (sat !== 1 || vib) { const gr = 0.299 * r + 0.587 * g + 0.114 * b; let s = sat;
+        if (vib) { const mx = Math.max(r, g, b), mn = Math.min(r, g, b); let cur = (mx - mn) / 255; cur = cur > 1 ? 1 : cur < 0 ? 0 : cur; s *= 1 + vib * (1 - cur); }
+        r = gr + (r - gr) * s; g = gr + (g - gr) * s; b = gr + (b - gr) * s; }
+      if (sep) { const tr = 0.393*r + 0.769*g + 0.189*b, tg = 0.349*r + 0.686*g + 0.168*b, tb = 0.272*r + 0.534*g + 0.131*b;
+        r += (tr - r) * sep; g += (tg - g) * sep; b += (tb - b) * sep; }
+      if (mono) { const gr = 0.299 * r + 0.587 * g + 0.114 * b; r += (gr - r) * mono; g += (gr - g) * mono; b += (gr - b) * mono; }
+      if (fade) { const k = 1 - 0.25 * fade, add = 42 * fade; r = r * k + add; g = g * k + add; b = b * k + add; }
+      if (vig) { const t = Math.sqrt((x - cx) * (x - cx) + dy2) / md; const s = t < 0.3 ? 0 : t > 1 ? 1 : (t - 0.3) / 0.7; const f = 1 - vig * 0.85 * s * s * (3 - 2 * s); r *= f; g *= f; b *= f; }
+      if (grain) { const n = (hash(i) - 0.5) * grain; r += n; g += n; b += n; }
+      d[i] = r; d[i + 1] = g; d[i + 2] = b;
+    }
+  }
+  if (a.sharpen > 0) {
+    const k = (a.sharpen / 100) * 0.7, src = new Uint8ClampedArray(d), row = w * 4;
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4;
+      for (let ch = 0; ch < 3; ch++) { const j = i + ch;
+        d[j] = src[j] * (1 + 4 * k) - k * (src[j - 4] + src[j + 4] + src[j - row] + src[j + row]); }
+    }
+  }
+}
+
+/* ---------- Document ---------- */
+function sizeDoc() {
+  for (const c of [view, comp, tmp]) { c.width = S.w; c.height = S.h; }
+  $("#docInfo").textContent = `${S.w} × ${S.h} px`;
+  applyZoom();
+}
+function applyZoom() {
+  const wrap = $("#wrap");
+  wrap.style.width = Math.round(S.w * S.zoom) + "px";
+  wrap.style.height = Math.round(S.h * S.zoom) + "px";
+  $("#zoomVal").textContent = Math.round(S.zoom * 100) + "%";
+  drawCropBox();
+}
+function zoomFit() {
+  const st = $("#stage"), pad = 48;
+  S.zoom = Math.max(0.05, Math.min((st.clientWidth - pad) / S.w, (st.clientHeight - pad) / S.h, 4));
+  applyZoom();
+}
+function setZoom(z) { S.zoom = Math.max(0.05, Math.min(8, z)); applyZoom(); }
+function newDocument(w, h, baseCanvas, name) {
+  pushUndo();
+  S.w = w; S.h = h; S.adj = { ...DEF }; S.layers = []; S.active = null;
+  const base = makeLayer(name || "Background", baseCanvas || mk(w, h));
+  S.layers.push(base); S.active = base.id;
+  sizeDoc(); zoomFit(); syncAdj(); renderLayers(); render(); clearCrop();
+}
+function bakeLayer(l, w, h, fn) { const n = mk(w, h), x = n.getContext("2d"); fn(x, l); l.canvas = n; l.x = 0; l.y = 0; }
+function cropDoc(x, y, w, h) {
+  x = Math.round(Math.max(0, x)); y = Math.round(Math.max(0, y));
+  w = Math.round(Math.min(w, S.w - x)); h = Math.round(Math.min(h, S.h - y));
+  if (w < 4 || h < 4) return false;
+  for (const l of S.layers) bakeLayer(l, w, h, (c) => c.drawImage(l.canvas, l.x - x, l.y - y));
+  S.w = w; S.h = h; sizeDoc(); zoomFit(); renderLayers(); render(); return true;
+}
+function rotateDoc(deg) {
+  deg = ((deg % 360) + 360) % 360; if (!deg) return;
+  const nw = deg === 180 ? S.w : S.h, nh = deg === 180 ? S.h : S.w;
+  for (const l of S.layers) bakeLayer(l, nw, nh, (c) => { c.translate(nw / 2, nh / 2); c.rotate(deg * Math.PI / 180); c.drawImage(l.canvas, l.x - S.w / 2, l.y - S.h / 2); });
+  S.w = nw; S.h = nh; sizeDoc(); zoomFit(); renderLayers(); render();
+}
+function flipDoc(dir) {
+  for (const l of S.layers) bakeLayer(l, S.w, S.h, (c) => { if (dir === "h") { c.translate(S.w, 0); c.scale(-1, 1); } else { c.translate(0, S.h); c.scale(1, -1); } c.drawImage(l.canvas, l.x, l.y); });
+  renderLayers(); render();
+}
+
+/* ---------- Sample scene (generated) ---------- */
+function sampleScene(w, h) {
+  const c = mk(w, h), x = c.getContext("2d");
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const hz = h * 0.62;
+  const sky = x.createLinearGradient(0, 0, 0, hz);
+  sky.addColorStop(0, "#1b2546"); sky.addColorStop(0.45, "#5a4a78"); sky.addColorStop(0.8, "#d9826a"); sky.addColorStop(1, "#f3b37a");
+  x.fillStyle = sky; x.fillRect(0, 0, w, hz);
+  for (let i = 0; i < 140; i++) { x.fillStyle = `rgba(255,255,240,${0.2 + rnd() * 0.6})`; x.fillRect(rnd() * w, rnd() * hz * 0.4, 1.5, 1.5); }
+  const sx = w * 0.64, sy = hz - h * 0.05;
+  const glow = x.createRadialGradient(sx, sy, 0, sx, sy, w * 0.35);
+  glow.addColorStop(0, "rgba(255,226,160,.95)"); glow.addColorStop(0.08, "rgba(255,200,120,.6)"); glow.addColorStop(1, "rgba(255,160,100,0)");
+  x.fillStyle = glow; x.fillRect(0, 0, w, hz);
+  x.fillStyle = "#fff1cc"; x.beginPath(); x.arc(sx, sy, w * 0.03, 0, 7); x.fill();
+  const ridge = (base, amp, col, rough) => {
+    x.fillStyle = col; x.beginPath(); x.moveTo(0, hz);
+    let yy = base; for (let px = 0; px <= w; px += w / 90) { yy += (rnd() - 0.5) * amp * rough; yy = Math.max(base - amp, Math.min(base + amp * 0.3, yy)); x.lineTo(px, yy); }
+    x.lineTo(w, hz); x.closePath(); x.fill();
+  };
+  ridge(hz - h * 0.2, h * 0.16, "#6b5a7e", 0.5);
+  ridge(hz - h * 0.11, h * 0.11, "#463c5c", 0.6);
+  ridge(hz - h * 0.04, h * 0.06, "#2a2638", 0.7);
+  // lake reflection
+  x.fillStyle = "#1b1a2e"; x.fillRect(0, hz, w, h - hz);
+  x.save(); x.translate(0, hz * 2); x.scale(1, -1); x.globalAlpha = 0.55; x.drawImage(c, 0, 0, w, hz, 0, 0, w, hz); x.restore();
+  const water = x.createLinearGradient(0, hz, 0, h);
+  water.addColorStop(0, "rgba(40,50,90,.25)"); water.addColorStop(1, "rgba(12,16,32,.95)");
+  x.fillStyle = water; x.fillRect(0, hz, w, h - hz);
+  for (let i = 0; i < 260; i++) { const yy = hz + rnd() * (h - hz); x.fillStyle = `rgba(255,220,170,${0.05 + rnd() * 0.12})`; x.fillRect(rnd() * w, yy, 20 + rnd() * 80, 1); }
+  // shore trees
+  x.fillStyle = "#121019";
+  for (let px = -20; px < w * 0.42; px += 14 + rnd() * 18) { const th = h * (0.06 + rnd() * 0.12), tw = th * 0.32; x.beginPath(); x.moveTo(px, hz + 4); x.lineTo(px + tw / 2, hz - th); x.lineTo(px + tw, hz + 4); x.fill(); }
+  x.fillRect(0, hz - 2, w * 0.45, 8);
+  return c;
+}
+
+/* ---------- Layers UI ---------- */
+const eyeOn = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const eyeOff = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3l18 18M10.6 5.1A10 10 0 0112 5c6.5 0 10 7 10 7a17 17 0 01-3 3.9M6.1 6.1C3.6 7.8 2 12 2 12s3.5 7 10 7c1.7 0 3.2-.5 4.5-1.2"/></svg>';
+$("#lyBlend").innerHTML = BLENDS.map(([v, n]) => `<option value="${v}">${n}</option>`).join("");
+function renderLayers() {
+  const list = $("#layerList"); list.innerHTML = "";
+  for (const l of [...S.layers].reverse()) {
+    const row = document.createElement("div");
+    row.className = "layer" + (l.id === S.active ? " active" : "") + (l.visible ? "" : " hidden-layer");
+    const eye = document.createElement("button"); eye.className = "eye"; eye.innerHTML = l.visible ? eyeOn : eyeOff; eye.setAttribute("aria-label", l.visible ? "Hide layer" : "Show layer");
+    eye.onclick = (e) => { e.stopPropagation(); pushUndo(); l.visible = !l.visible; renderLayers(); render(); };
+    const th = mk(92, 68), tx = th.getContext("2d"); const sc = Math.min(92 / S.w, 68 / S.h);
+    tx.drawImage(l.canvas, (92 - S.w * sc) / 2 + l.x * sc, (68 - S.h * sc) / 2 + l.y * sc, l.canvas.width * sc, l.canvas.height * sc);
+    const nm = document.createElement("div"); nm.style.minWidth = "0";
+    nm.innerHTML = `<div class="name"></div><div class="meta">${Math.round(l.opacity * 100)}% · ${(BLENDS.find(b => b[0] === l.blend) || ["", "Normal"])[1]}</div>`;
+    nm.firstChild.textContent = l.name;
+    row.append(eye, th, nm);
+    row.onclick = () => { S.active = l.id; renderLayers(); };
+    list.append(row);
+  }
+  const a = activeLayer();
+  $("#layerCtl").hidden = !a;
+  if (a) { $("#lyName").value = a.name; $("#lyOpacity").value = Math.round(a.opacity * 100); $("#lyOpacityV").textContent = Math.round(a.opacity * 100) + "%"; $("#lyBlend").value = a.blend; }
+  $("#lyMerge").disabled = !a || S.layers.indexOf(a) === 0;
+}
+let lyOpUndo = 0;
+$("#lyName").addEventListener("change", (e) => { const a = activeLayer(); if (a) { pushUndo(); a.name = e.target.value || a.name; renderLayers(); } });
+$("#lyOpacity").addEventListener("input", (e) => { const a = activeLayer(); if (!a) return; if (Date.now() - lyOpUndo > 800) pushUndo(); lyOpUndo = Date.now(); a.opacity = e.target.value / 100; $("#lyOpacityV").textContent = e.target.value + "%"; render(); });
+$("#lyOpacity").addEventListener("change", renderLayers);
+$("#lyBlend").addEventListener("change", (e) => { const a = activeLayer(); if (a) { pushUndo(); a.blend = e.target.value; renderLayers(); render(); } });
+$("#lyNew").onclick = () => { pushUndo(); addLayer(makeLayer("Layer " + (S.layers.length + 1))); };
+$("#lyDup").onclick = () => { const a = activeLayer(); if (!a) return; pushUndo(); addLayer({ ...a, id: uid++, name: a.name + " copy", canvas: clone(a.canvas) }); };
+$("#lyDel").onclick = () => { const a = activeLayer(); if (!a) return; pushUndo(); const i = S.layers.indexOf(a); S.layers.splice(i, 1); S.active = (S.layers[Math.max(0, i - 1)] || {}).id ?? null; renderLayers(); render(); };
+const moveLayer = (dir) => { const a = activeLayer(); if (!a) return; const i = S.layers.indexOf(a), j = i + dir; if (j < 0 || j >= S.layers.length) return; pushUndo(); [S.layers[i], S.layers[j]] = [S.layers[j], S.layers[i]]; renderLayers(); render(); };
+$("#lyUp").onclick = () => moveLayer(1); $("#lyDown").onclick = () => moveLayer(-1);
+$("#lyMerge").onclick = () => {
+  const a = activeLayer(); if (!a) return; const i = S.layers.indexOf(a); if (i < 1) return; pushUndo();
+  const below = S.layers[i - 1];
+  bakeLayer(below, S.w, S.h, (c) => { c.globalAlpha = below.opacity; c.drawImage(below.canvas, below.x, below.y); c.globalAlpha = a.visible ? a.opacity : 0; c.globalCompositeOperation = a.blend; c.drawImage(a.canvas, a.x, a.y); });
+  below.opacity = 1; S.layers.splice(i, 1); S.active = below.id; renderLayers(); render();
+};
+$("#lyFill").onclick = () => { const a = activeLayer(); if (!a) return; pushUndo(); const c = a.canvas.getContext("2d"); c.fillStyle = $("#color").value; c.fillRect(0, 0, a.canvas.width, a.canvas.height); renderLayers(); render(); };
+$("#lyClear").onclick = () => { const a = activeLayer(); if (!a) return; pushUndo(); a.canvas.getContext("2d").clearRect(0, 0, a.canvas.width, a.canvas.height); renderLayers(); render(); };
+$("#lyPlace").onclick = () => $("#placeIn").click();
+$("#placeIn").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) loadImage(f, true); };
+
+/* ---------- Adjust UI ---------- */
+(function buildAdjust() {
+  const host = $("#adjGroups");
+  for (const [title, items] of GROUPS) {
+    const g = document.createElement("div"); g.className = "adj-group";
+    g.innerHTML = `<div class="label">${title}</div>`;
+    for (const [k, label] of items) {
+      const [mn, mx] = rng(k);
+      const row = document.createElement("div"); row.className = "adj";
+      row.innerHTML = `<label for="adj-${k}">${label}</label><output id="adjv-${k}"></output><input type="range" id="adj-${k}" min="${mn}" max="${mx}" step="1" value="0">`;
+      g.append(row);
+    }
+    host.append(g);
+  }
+  let last = 0;
+  host.addEventListener("input", (e) => {
+    if (!e.target.id?.startsWith("adj-")) return;
+    if (Date.now() - last > 800) pushUndo(); last = Date.now();
+    const k = e.target.id.slice(4); S.adj[k] = +e.target.value; syncAdj(k); render();
+  });
+  host.addEventListener("dblclick", (e) => {
+    if (!e.target.id?.startsWith("adj-")) return;
+    pushUndo(); const k = e.target.id.slice(4); S.adj[k] = 0; syncAdj(); render();
+  });
+  const pc = $("#presetChips");
+  for (const name of Object.keys(PRESETS)) {
+    const b = document.createElement("button"); b.className = "chip"; b.textContent = name;
+    b.onclick = () => { pushUndo(); S.adj = { ...DEF, ...PRESETS[name] }; syncAdj(); render(); toast(name + " applied"); };
+    pc.append(b);
+  }
+  $("#adjReset").onclick = () => { pushUndo(); S.adj = { ...DEF }; syncAdj(); render(); };
+})();
+function syncAdj(only) {
+  for (const k of only ? [only] : Object.keys(DEF)) {
+    const v = S.adj[k] || 0, inp = $("#adj-" + k), out = $("#adjv-" + k);
+    if (!inp) continue;
+    if (!only) inp.value = v;
+    out.textContent = fmtAdj(k, v); out.classList.toggle("on", v !== 0);
+  }
+}
+
+/* ---------- Tools ---------- */
+function setTool(t) {
+  S.tool = t;
+  $$(".tool").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.tool === t)));
+  $$("#opts [data-for]").forEach(el => { el.hidden = !el.dataset.for.split(" ").includes(t); });
+  view.style.cursor = { hand: "grab", move: "move", text: "text", eyedropper: "crosshair", crop: "crosshair" }[t] || "crosshair";
+  if (t !== "crop") clearCrop();
+}
+$$(".tool").forEach(b => b.onclick = () => setTool(b.dataset.tool));
+const bindOut = (id, unit) => { const i = $(id), o = $(id + "V"); const f = () => o.textContent = i.value + unit; i.addEventListener("input", f); f(); };
+bindOut("#optSize", "px"); bindOut("#optOpacity", "%"); bindOut("#optSoft", "%"); bindOut("#optTextSize", "px");
+const swatchSync = () => { $("#swatch").style.background = $("#color").value; };
+$("#color").addEventListener("input", swatchSync); swatchSync();
+
+function toDoc(e) { const r = view.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * S.w, y: (e.clientY - r.top) / r.height * S.h }; }
+
+function drawStrokeBuffer() {
+  const l = stroke.layer, c = stroke.buf, x = c.getContext("2d");
+  x.clearRect(0, 0, c.width, c.height);
+  const size = +$("#optSize").value, soft = +$("#optSoft").value / 100;
+  x.filter = soft > 0 ? `blur(${(size * soft * 0.35).toFixed(1)}px)` : "none";
+  x.strokeStyle = x.fillStyle = stroke.eraser ? "#000" : $("#color").value;
+  x.lineCap = "round"; x.lineJoin = "round"; x.lineWidth = size * (1 - soft * 0.4);
+  const pts = stroke.pts.map(p => ({ x: p.x - l.x, y: p.y - l.y }));
+  if (pts.length === 1) { x.beginPath(); x.arc(pts[0].x, pts[0].y, x.lineWidth / 2, 0, 7); x.fill(); }
+  else { x.beginPath(); x.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length - 1; i++) { const mx = (pts[i].x + pts[i + 1].x) / 2, my = (pts[i].y + pts[i + 1].y) / 2; x.quadraticCurveTo(pts[i].x, pts[i].y, mx, my); }
+    const lp = pts[pts.length - 1]; x.lineTo(lp.x, lp.y); x.stroke(); }
+  x.filter = "none";
+}
+function applyStroke(ctx) {
+  ctx.save(); ctx.globalAlpha = +$("#optOpacity").value / 100;
+  ctx.globalCompositeOperation = stroke.eraser ? "destination-out" : "source-over";
+  ctx.drawImage(stroke.buf, 0, 0); ctx.restore();
+}
+function strokePreview(l) {
+  if (strokeTmp.width !== l.canvas.width || strokeTmp.height !== l.canvas.height) { strokeTmp.width = l.canvas.width; strokeTmp.height = l.canvas.height; }
+  stctx.clearRect(0, 0, strokeTmp.width, strokeTmp.height); stctx.drawImage(l.canvas, 0, 0); applyStroke(stctx); return strokeTmp;
+}
+
+let drag = null;
+view.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  view.setPointerCapture(e.pointerId);
+  const p = toDoc(e), t = S.tool, a = activeLayer();
+  if (t === "brush" || t === "eraser") {
+    if (!a) return toast("Add a layer first");
+    if (!a.visible) return toast("The active layer is hidden");
+    pushUndo();
+    stroke = { layer: a, pts: [p], eraser: t === "eraser", buf: mk(a.canvas.width, a.canvas.height) };
+    drawStrokeBuffer(); render();
+  } else if (t === "move") {
+    if (!a) return; pushUndo(); drag = { kind: "move", sx: p.x, sy: p.y, lx: a.x, ly: a.y, layer: a };
+  } else if (t === "hand") {
+    const st = $("#stage"); drag = { kind: "pan", cx: e.clientX, cy: e.clientY, sl: st.scrollLeft, stp: st.scrollTop }; view.style.cursor = "grabbing";
+  } else if (t === "eyedropper") {
+    doRender(); const px = vctx.getImageData(Math.min(S.w - 1, Math.max(0, p.x | 0)), Math.min(S.h - 1, Math.max(0, p.y | 0)), 1, 1).data;
+    const hex = "#" + [px[0], px[1], px[2]].map(v => v.toString(16).padStart(2, "0")).join("");
+    $("#color").value = hex; swatchSync(); $("#pickedHex").textContent = hex.toUpperCase();
+  } else if (t === "text") {
+    placeText(p);
+  } else if (t === "crop") {
+    drag = { kind: "crop", sx: p.x, sy: p.y }; crop = { x: p.x, y: p.y, w: 0, h: 0 }; drawCropBox();
+  }
+});
+view.addEventListener("pointermove", (e) => {
+  if (stroke) { const ev = e.getCoalescedEvents ? e.getCoalescedEvents() : [e]; for (const c of (ev.length ? ev : [e])) stroke.pts.push(toDoc(c)); drawStrokeBuffer(); render(); return; }
+  if (!drag) return;
+  const p = toDoc(e);
+  if (drag.kind === "move") { drag.layer.x = Math.round(drag.lx + p.x - drag.sx); drag.layer.y = Math.round(drag.ly + p.y - drag.sy); render(); }
+  else if (drag.kind === "pan") { const st = $("#stage"); st.scrollLeft = drag.sl - (e.clientX - drag.cx); st.scrollTop = drag.stp - (e.clientY - drag.cy); }
+  else if (drag.kind === "crop") {
+    const px = Math.max(0, Math.min(S.w, p.x)), py = Math.max(0, Math.min(S.h, p.y));
+    let w = px - drag.sx, h = py - drag.sy; const r = +$("#cropRatio").value;
+    if (r) { const sgn = Math.sign(h) || 1; h = sgn * Math.abs(w) / r; }
+    crop = { x: drag.sx, y: drag.sy, w, h }; drawCropBox();
+  }
+});
+const endPointer = () => {
+  if (stroke) { const l = stroke.layer; applyStroke(l.canvas.getContext("2d")); stroke = null; renderLayers(); render(); }
+  if (drag?.kind === "move") renderLayers();
+  if (drag?.kind === "pan") view.style.cursor = "grab";
+  drag = null;
+};
+view.addEventListener("pointerup", endPointer); view.addEventListener("pointercancel", endPointer);
+
+async function placeText(p) {
+  const text = $("#optText").value.trim(); if (!text) return toast("Type some text in the toolbar first");
+  const size = +$("#optTextSize").value, fam = FONTS[$("#optFont").value];
+  try { await document.fonts.load(`600 ${size}px ${fam}`); } catch {}
+  pushUndo();
+  const l = makeLayer("Text: " + text.slice(0, 24));
+  drawTextOp(l.canvas.getContext("2d"), { text, x: p.x, y: p.y, sizePx: size, color: $("#color").value, family: fam, weight: 600, align: "left", baseline: "middle" });
+  addLayer(l);
+}
+function drawTextOp(x, o) {
+  x.save();
+  x.font = `${o.weight || 600} ${o.sizePx}px ${o.family}`;
+  x.textAlign = o.align || "left"; x.textBaseline = o.baseline || "middle"; x.fillStyle = o.color || "#fff";
+  let lines = String(o.text).split("\n");
+  if (o.maxWidthPx) { const out = []; for (const ln of lines) { let cur = ""; for (const w of ln.split(" ")) { const t = cur ? cur + " " + w : w; if (x.measureText(t).width > o.maxWidthPx && cur) { out.push(cur); cur = w; } else cur = t; } out.push(cur); } lines = out; }
+  const lh = o.sizePx * 1.18, y0 = o.y - (lines.length - 1) * lh / 2;
+  if (o.shadow) { x.shadowColor = "rgba(0,0,0,.55)"; x.shadowBlur = o.sizePx * 0.25; x.shadowOffsetY = o.sizePx * 0.05; }
+  lines.forEach((ln, i) => {
+    if (o.stroke) { x.save(); x.shadowColor = "transparent"; x.lineJoin = "round"; x.strokeStyle = o.stroke; x.lineWidth = Math.max(1, o.sizePx * 0.08); x.strokeText(ln, o.x, y0 + i * lh); x.restore(); }
+    x.fillText(ln, o.x, y0 + i * lh);
+  });
+  x.restore();
+}
+
+/* ---------- Crop ---------- */
+let crop = null;
+function normCrop() { if (!crop) return null; const x = Math.min(crop.x, crop.x + crop.w), y = Math.min(crop.y, crop.y + crop.h); return { x, y, w: Math.abs(crop.w), h: Math.abs(crop.h) }; }
+function drawCropBox() {
+  const box = $("#cropBox"), c = normCrop();
+  const ok = c && c.w > 4 && c.h > 4;
+  box.hidden = !ok; $("#cropApply").disabled = !ok;
+  if (!ok) return;
+  Object.assign(box.style, { left: c.x * S.zoom + "px", top: c.y * S.zoom + "px", width: c.w * S.zoom + "px", height: c.h * S.zoom + "px" });
+}
+function clearCrop() { crop = null; drawCropBox(); }
+$("#cropApply").onclick = () => { const c = normCrop(); if (!c) return; pushUndo(); if (cropDoc(c.x, c.y, c.w, c.h)) toast(`Cropped to ${S.w} × ${S.h}`); clearCrop(); };
+$("#cropCancel").onclick = clearCrop;
+$("#rotL").onclick = () => { pushUndo(); rotateDoc(270); };
+$("#rotR").onclick = () => { pushUndo(); rotateDoc(90); };
+$("#flipH").onclick = () => { pushUndo(); flipDoc("h"); };
+$("#flipV").onclick = () => { pushUndo(); flipDoc("v"); };
+
+/* ---------- Files ---------- */
+async function fileToCanvas(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image(); img.src = url; await img.decode();
+    let w = img.naturalWidth, h = img.naturalHeight; const s = Math.min(1, MAX_SIDE / Math.max(w, h));
+    w = Math.round(w * s); h = Math.round(h * s);
+    const c = mk(w, h); c.getContext("2d").drawImage(img, 0, 0, w, h); return { c, scaled: s < 1 };
+  } finally { URL.revokeObjectURL(url); }
+}
+async function loadImage(file, asLayer) {
+  if (!file || !file.type.startsWith("image/")) return toast("That file isn't an image");
+  try {
+    const { c, scaled } = await fileToCanvas(file);
+    const name = file.name ? file.name.replace(/\.[^.]+$/, "") : "Pasted image";
+    if (asLayer) {
+      pushUndo(); const s = Math.min(1, S.w / c.width, S.h / c.height);
+      const n = mk(c.width * s, c.height * s); n.getContext("2d").drawImage(c, 0, 0, n.width, n.height);
+      addLayer(makeLayer(name, n, { x: Math.round((S.w - n.width) / 2), y: Math.round((S.h - n.height) / 2) }));
+      toast("Placed as a new layer");
+    } else {
+      newDocument(c.width, c.height, c, name);
+      toast(scaled ? `Opened, scaled to ${c.width} × ${c.height} for editing` : "Opened " + name);
+    }
+  } catch { toast("Couldn't read that image. Try a JPEG or PNG."); }
+}
+$("#btnOpen").onclick = () => $("#fileIn").click();
+$("#fileIn").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) loadImage(f, false); };
+const stageEl = $("#stage");
+stageEl.addEventListener("dragover", (e) => { if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); $("#dropHint").hidden = false; } });
+stageEl.addEventListener("dragleave", (e) => { if (e.target === stageEl) $("#dropHint").hidden = true; });
+stageEl.addEventListener("drop", (e) => { e.preventDefault(); $("#dropHint").hidden = true; const f = e.dataTransfer.files[0]; if (f) loadImage(f, false); });
+window.addEventListener("paste", (e) => { if (e.target.closest?.("textarea, input")) return; const f = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith("image/")); if (f) { e.preventDefault(); loadImage(f, true); } });
+
+let newBg = "#ffffff";
+$("#btnNew").onclick = (e) => { e.stopPropagation(); togglePop("#newPop"); };
+$$("[data-bg]").forEach(b => b.onclick = () => { newBg = b.dataset.bg; $$("[data-bg]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); });
+$$("[data-new]").forEach(b => b.onclick = () => {
+  const [w, h] = b.dataset.new.split("x").map(Number); const c = mk(w, h);
+  if (newBg !== "transparent") { const x = c.getContext("2d"); x.fillStyle = newBg; x.fillRect(0, 0, w, h); }
+  newDocument(w, h, c, "Background"); togglePop(null);
+});
+function togglePop(sel) { for (const p of ["#newPop", "#exportPop"]) $(p).hidden = p === sel ? !$(p).hidden : true; }
+document.addEventListener("click", (e) => { if (!e.target.closest(".pop") && !e.target.closest("#btnNew,#btnExport")) togglePop(null); });
+
+/* ---------- Export ---------- */
+let downloads = null;
+$("#btnExport").onclick = (e) => { e.stopPropagation(); togglePop("#exportPop"); };
+$$("[data-export]").forEach(b => b.onclick = async () => {
+  const fmt = b.dataset.export; doRender();
+  let src = view;
+  if (fmt === "jpeg") { src = mk(S.w, S.h); const x = src.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, S.w, S.h); x.drawImage(view, 0, 0); }
+  const blob = await new Promise(r => src.toBlob(r, "image/" + fmt, 0.92));
+  if (!blob) return toast("This browser can't export that format");
+  const name = `fastedit-${S.w}x${S.h}.${fmt === "jpeg" ? "jpg" : fmt}`;
+  if (downloads) {
+    try { const r = await downloads.save({ filename: name, data: blob }); if (r?.status === "saved") toast("Saved " + name); togglePop(null); }
+    catch (err) { toast(err?.code === "cancelled" || err?.code === "declined" ? "Export cancelled" : "Export didn't go through. Try again."); }
+  } else {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    toast("Downloaded " + name); togglePop(null);
+  }
+});
+
+/* ---------- Zoom & compare ---------- */
+$("#zoomIn").onclick = () => setZoom(S.zoom * 1.25);
+$("#zoomOut").onclick = () => setZoom(S.zoom / 1.25);
+$("#zoomFit").onclick = zoomFit;
+stageEl.addEventListener("wheel", (e) => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); setZoom(S.zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1)); }, { passive: false });
+const cmp = $("#btnCompare");
+const cmpOn = () => { S.comparing = true; cmp.classList.add("primary"); render(); };
+const cmpOff = () => { if (!S.comparing) return; S.comparing = false; cmp.classList.remove("primary"); render(); };
+cmp.addEventListener("pointerdown", cmpOn); cmp.addEventListener("pointerup", cmpOff); cmp.addEventListener("pointerleave", cmpOff);
+$("#btnUndo").onclick = doUndo; $("#btnRedo").onclick = doRedo;
+
+/* ---------- Keyboard ---------- */
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest("input, textarea, select")) return;
+  const k = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); e.shiftKey ? doRedo() : doUndo(); return; }
+  if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); doRedo(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const map = { v: "move", b: "brush", e: "eraser", t: "text", i: "eyedropper", c: "crop", h: "hand" };
+  if (map[k]) setTool(map[k]);
+  if (k === "[" || k === "]") { const s = $("#optSize"); s.value = Math.max(1, Math.min(400, +s.value + (k === "]" ? 1 : -1) * Math.max(2, Math.round(s.value * 0.15)))); s.dispatchEvent(new Event("input")); }
+  if (k === "enter" && S.tool === "crop") $("#cropApply").click();
+  if (k === "\\" && !e.repeat) cmpOn();
+});
+document.addEventListener("keyup", (e) => { if (e.key === "\\") cmpOff(); });
+
+/* ---------- Tabs ---------- */
+$$(".tabs button").forEach(b => b.onclick = () => {
+  $$(".tabs button").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+  for (const t of ["ai", "adjust", "layers"]) $("#pane-" + t).hidden = t !== b.dataset.tab;
+});
+
+let toastT = 0;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
+
+/* ---------- AI ---------- */
+let sample = null, canImages = false, aiMode = "edit", aiCtl = null, busy = false;
+let builtinInfo = null;
+const CHIPS = {
+  edit: ["Auto-enhance this photo", "Golden-hour glow with a soft light leak", "Moody cinematic teal & orange", "High-contrast black and white", "Add a fitting caption in elegant type", "Crop to a stronger composition", "Draw a hand-drawn white frame"],
+  art: ["Flock of birds in the sky", "Bold geometric poster border", "Sparkles and lens flare over the light source", "Retro 70s sunset stripes overlay", "A full illustrated scene: lighthouse at night"],
+  critique: ["Critique this image"],
+};
+function renderChips() {
+  const host = $("#aiChips"); host.innerHTML = "";
+  for (const c of CHIPS[aiMode]) { const b = document.createElement("button"); b.className = "chip"; b.textContent = c; b.onclick = () => { $("#aiPrompt").value = c; runAI(); }; host.append(b); }
+  $("#aiGo").textContent = { edit: "Apply with AI", art: "Generate layer", critique: "Get critique" }[aiMode];
+  $("#aiPrompt").placeholder = { edit: "Describe an edit, e.g. “warm golden-hour light, lift the shadows and add a subtle vignette”", art: "Describe artwork to draw on a new layer, e.g. “a crescent moon and stars in the upper sky”", critique: "Optional: what should Claude focus on? (composition, color, mood…)" }[aiMode];
+}
+$$(".seg button").forEach(b => b.onclick = () => { aiMode = b.dataset.mode; $$(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); renderChips(); });
+renderChips();
+
+function setStatus(msg, warn) { const s = $("#aiStatus"); s.textContent = msg; s.classList.toggle("warn", !!warn); }
+function logEntry(kind, text, extra) {
+  const log = $("#aiLog"); log.querySelector(".empty-log")?.remove();
+  const d = document.createElement("div"); d.className = "entry " + kind;
+  if (kind === "ai") { const w = document.createElement("div"); w.className = "who"; w.textContent = agentLabel(); d.append(w); }
+  const t = document.createElement("div"); t.textContent = text; t.style.whiteSpace = "pre-wrap"; d.append(t);
+  if (extra) d.append(extra);
+  log.prepend(d);
+}
+const ERR = {
+  access_code: "The built-in AI needs an access code. Open Connect agent to enter it, or use your own key or agent.",
+  not_configured: "The built-in AI isn't set up on this deployment. Open Connect agent to use your own Anthropic key or agent.",
+  bad_key: "Anthropic rejected that API key. Check it under Connect agent.",
+  network: "Couldn't reach the AI. Check your connection or the agent URL.",
+  agent_error: "Your agent returned an error.",
+  timeout: "The AI took too long. Try a simpler request.",
+  not_granted: "Claude access was declined for this page. Reload the page to be asked again.",
+  rate_limited: "Too many requests right now. Wait a minute, then try again.",
+  invalid_json: "Claude's reply couldn't be turned into an edit. Try rephrasing the request.",
+  image_rejected: "The image couldn't be sent to Claude. Try a smaller image.",
+  refused: "Claude declined this request.",
+  prompt_too_large: "That request is too long. Shorten it and try again.",
+  session_expired: "Your session expired. Reload the page to continue.",
+  sampling_disabled: "AI is turned off for this account.",
+  empty_completion: "Claude didn't return anything. Try again.",
+};
+async function imageBlob() {
+  doRender();
+  const s = Math.min(1, 1024 / Math.max(S.w, S.h)), c = mk(S.w * s, S.h * s), x = c.getContext("2d");
+  x.fillStyle = "#808080"; x.fillRect(0, 0, c.width, c.height); x.drawImage(view, 0, 0, c.width, c.height);
+  return new Promise(r => c.toBlob(r, "image/jpeg", 0.85));
+}
+function docSummary() {
+  return `Document: ${S.w}×${S.h}px. Layers bottom→top: ${S.layers.map(l => `"${l.name}"${l.visible ? "" : " (hidden)"}`).join(", ")}.\nCurrent global adjustments (absolute values): ${JSON.stringify(S.adj)}`;
+}
+const EDIT_SPEC = (req, hasImg, w, h) => `You are the editing engine inside a layer-based photo editor. Turn the user's request into a concrete edit.
+User request: "${req}"
+${hasImg ? "The attached image is the current rendered result (downscaled for you)." : "No image is attached; infer conservatively from the description and settings."}
+${docSummary()}
+
+Global adjustment ranges: exposure -100..100 (50 = +1 EV); contrast, highlights, shadows, temperature (+ = warmer), tint (+ = magenta, - = green), saturation, vibrance: -100..100; hue -180..180 (degrees); fade, sepia, mono (black & white), vignette, grain, sharpen, blur: 0..100. Normal photo corrections stay within about ±40. Values you send are the FINAL absolute values, not deltas.
+
+Reply with ONLY one JSON object:
+{
+  "message": "1-2 plain sentences telling the user what you changed",
+  "adjustments": { only the keys you want to set },
+  "resetAdjustments": false,
+  "rotate": 0,            // 0, 90, 180 or 270 clockwise
+  "flip": null,           // null, "horizontal" or "vertical"
+  "crop": null,           // or {"x":0..1,"y":0..1,"w":0..1,"h":0..1} fractions of the current image
+  "layer": null           // or {"name":"...","blend":"source-over|multiply|screen|overlay|soft-light|lighten|darken|color","opacity":0..1,"ops":[...]}
+}
+Drawing ops for "layer". x/y/cx/cy/x0/x1 are fractions of the image width; y/cy/y0/y1/h/ry are fractions of the height; size, lineWidth, rx, r, radius and maxWidth are fractions of the width. The image is ${w}×${h}px.
+  {"type":"text","text":"...","x":0.5,"y":0.88,"size":0.06,"color":"#ffffff","font":"sans|display|serif|mono|script","weight":400-800,"align":"left|center|right","maxWidth":0.8,"shadow":true,"stroke":null}
+  {"type":"rect","x":0,"y":0,"w":1,"h":1,"fill":"css color or null","stroke":"css color or null","lineWidth":0.01,"radius":0}
+  {"type":"ellipse","cx":0.5,"cy":0.5,"rx":0.1,"ry":0.1,"fill":null,"stroke":"#fff","lineWidth":0.004}
+  {"type":"path","points":[[0.1,0.1],[0.2,0.15]],"closed":false,"smooth":true,"fill":null,"stroke":"#fff","lineWidth":0.004}
+  {"type":"gradient","kind":"linear|radial","x0":0,"y0":0,"x1":1,"y1":1,"r":0.6,"stops":[[0,"rgba(255,190,120,0.55)"],[1,"rgba(255,190,120,0)"]]}  (fills the whole layer; radial uses x0,y0 as center and r as radius)
+Any op may add "opacity":0..1. Only use "layer" when the request needs something added on top (text, shapes, light leaks, glows, frames). Place additions with care for the actual image content.`;
+const ART_SPEC = (req, hasImg) => `You draw artwork that is added as a new layer on top of a photo in a layer-based editor.
+User request: "${req}"
+${hasImg ? "The attached image is the current document, so you can place and color the artwork to fit it." : "No image is attached."}
+${docSummary()}
+
+Reply with ONLY one JSON object:
+{"message":"one plain sentence describing what you drew","name":"short layer name","blend":"source-over|screen|multiply|overlay|soft-light","opacity":1,"svg":"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${S.w} ${S.h}'>...</svg>"}
+SVG rules: viewBox exactly "0 0 ${S.w} ${S.h}". Leave the background transparent unless the user asks for a full scene or background. Use only shapes, paths, text, gradients, filters and patterns: no <image>, no <script>, no <foreignObject>, no external URLs or fonts. Keep the markup under 30 KB. Use single quotes inside the SVG so the JSON string stays valid.`;
+const CRIT_SPEC = (req, hasImg) => `You are a photo editor giving feedback on an image in progress.
+${req ? `The user wants you to focus on: "${req}"` : ""}
+${hasImg ? "The attached image is the current rendered result." : "No image is attached; say so briefly and give general advice."}
+${docSummary()}
+Reply with ONLY one JSON object: {"critique":"4-6 sentences on composition, light and color, plainly written","suggestions":["three short edit instructions the user could send to the AI edit tool, each under 12 words"]}`;
+
+function setBusy(on, label) {
+  busy = on; $("#aiGo").disabled = on; $("#aiStop").hidden = !on; $("#busyVeil").hidden = !on;
+  if (label) $("#busyText").textContent = label;
+}
+const stopAI = () => aiCtl?.abort();
+$("#aiStop").onclick = stopAI; $("#aiStop2").onclick = stopAI;
+$("#aiGo").onclick = () => runAI();
+$("#aiPrompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); runAI(); } });
+
+async function runAI() {
+  if (busy) return;
+  if (!agentReady()) { openAgentDialog(); return setStatus("Connect an AI agent first.", true); }
+  const req = $("#aiPrompt").value.trim();
+  if (!req && aiMode !== "critique") { $("#aiPrompt").focus(); return toast("Describe what you want first"); }
+  const mode = aiMode;
+  logEntry("you", (mode === "art" ? "Generate: " : mode === "critique" ? "Critique" + (req ? ": " : "") : "") + req);
+  aiCtl = new AbortController();
+  setBusy(true, mode === "art" ? "Drawing…" : "Looking at your image…");
+  const t0 = Date.now(); const tick = setInterval(() => setStatus(`Working… ${Math.round((Date.now() - t0) / 1000)} s`), 1000);
+  setStatus("Working…");
+  try {
+    const opts = { signal: aiCtl.signal, cache: false, task: mode };
+    if (agentSendsImages()) { const b = await imageBlob(); if (b) opts.images = [b]; }
+    const hasImg = !!opts.images;
+    if (mode === "edit") {
+      const plan = await aiJSON(EDIT_SPEC(req, hasImg, S.w, S.h), opts);
+      await applyPlan(plan);
+      logEntry("ai", plan?.message || "Edit applied.");
+    } else if (mode === "art") {
+      const art = await aiJSON(ART_SPEC(req, hasImg), opts);
+      if (!art || typeof art.svg !== "string") throw { code: "invalid_json" };
+      const layer = await svgToLayer(art.svg, art.name || "AI art");
+      pushUndo();
+      if (BLENDS.some(b => b[0] === art.blend)) layer.blend = art.blend;
+      if (typeof art.opacity === "number") layer.opacity = Math.max(0, Math.min(1, art.opacity));
+      addLayer(layer);
+      logEntry("ai", art.message || "Added a new layer.");
+    } else {
+      const r = await aiJSON(CRIT_SPEC(req, hasImg), opts);
+      const chips = document.createElement("div"); chips.className = "chips";
+      for (const s of (Array.isArray(r?.suggestions) ? r.suggestions : []).slice(0, 4)) {
+        const b = document.createElement("button"); b.className = "chip"; b.textContent = String(s);
+        b.onclick = () => { $$(".seg button")[0].click(); $("#aiPrompt").value = String(s); runAI(); };
+        chips.append(b);
+      }
+      logEntry("ai", r?.critique || "No critique returned.", chips);
+    }
+    if (mode !== "critique") $("#aiPrompt").value = "";
+    setStatus(hasImg ? "Done. The agent saw the current image." : "Done. The agent worked without seeing the image.");
+  } catch (e) {
+    const code = e?.code;
+    if (code === "cancelled") { setStatus("Stopped."); logEntry("err", "Stopped before finishing."); }
+    else { const msg = ERR[code] || (e instanceof Error ? "Couldn't apply that: " + e.message : e?.message || "Something went wrong. Try again."); setStatus(msg, true); logEntry("err", msg); if (["access_code","not_configured","bad_key"].includes(code)) openAgentDialog(); }
+  } finally { clearInterval(tick); setBusy(false); }
+}
+
+async function applyPlan(p) {
+  if (!p || typeof p !== "object") throw { code: "invalid_json" };
+  pushUndo();
+  const rot = [90, 180, 270].includes(+p.rotate) ? +p.rotate : 0; if (rot) rotateDoc(rot);
+  if (p.flip === "horizontal") flipDoc("h"); else if (p.flip === "vertical") flipDoc("v");
+  const c = p.crop;
+  if (c && [c.x, c.y, c.w, c.h].every(v => typeof v === "number") && c.w > 0.05 && c.h > 0.05 && (c.w < 0.999 || c.h < 0.999)) cropDoc(c.x * S.w, c.y * S.h, c.w * S.w, c.h * S.h);
+  if (p.resetAdjustments) S.adj = { ...DEF };
+  if (p.adjustments && typeof p.adjustments === "object") {
+    for (const [k, v] of Object.entries(p.adjustments)) if (k in DEF && typeof v === "number" && isFinite(v)) { const [mn, mx] = rng(k); S.adj[k] = Math.round(Math.max(mn, Math.min(mx, v))); }
+  }
+  syncAdj();
+  if (p.layer && Array.isArray(p.layer.ops) && p.layer.ops.length) {
+    const l = makeLayer(String(p.layer.name || "AI layer").slice(0, 40));
+    if (BLENDS.some(b => b[0] === p.layer.blend)) l.blend = p.layer.blend;
+    if (typeof p.layer.opacity === "number") l.opacity = Math.max(0, Math.min(1, p.layer.opacity));
+    await drawOps(l.canvas.getContext("2d"), p.layer.ops);
+    S.layers.push(l); S.active = l.id;
+  }
+  renderLayers(); render();
+}
+async function drawOps(x, ops) {
+  const W = S.w, H = S.h, num = (v, d) => (typeof v === "number" && isFinite(v) ? v : d);
+  const fams = new Set(ops.filter(o => o?.type === "text").map(o => FONTS[o.font] || FONTS.sans));
+  for (const f of fams) { try { await document.fonts.load(`600 40px ${f}`); } catch {} }
+  for (const o of ops.slice(0, 200)) {
+    if (!o || typeof o !== "object") continue;
+    try {
+      x.save(); x.globalAlpha = Math.max(0, Math.min(1, num(o.opacity, 1)));
+      const paint = () => { if (o.fill) { x.fillStyle = o.fill; x.fill(); } if (o.stroke) { x.strokeStyle = o.stroke; x.lineWidth = Math.max(1, num(o.lineWidth, 0.004) * W); x.lineCap = x.lineJoin = "round"; x.stroke(); } };
+      if (o.type === "text") {
+        drawTextOp(x, { text: o.text ?? "", x: num(o.x, 0.5) * W, y: num(o.y, 0.5) * H, sizePx: Math.max(4, num(o.size, 0.05) * W), color: o.color || "#fff", family: FONTS[o.font] || FONTS.sans, weight: num(o.weight, 600), align: ["left", "center", "right"].includes(o.align) ? o.align : "center", maxWidthPx: o.maxWidth ? o.maxWidth * W : 0, shadow: !!o.shadow, stroke: o.stroke || null });
+      } else if (o.type === "rect") {
+        x.beginPath(); const rx = num(o.x, 0) * W, ry = num(o.y, 0) * H, rw = num(o.w, 1) * W, rh = num(o.h, 1) * H, rr = num(o.radius, 0) * W;
+        if (rr > 0 && x.roundRect) x.roundRect(rx, ry, rw, rh, rr); else x.rect(rx, ry, rw, rh); paint();
+      } else if (o.type === "ellipse") {
+        x.beginPath(); x.ellipse(num(o.cx, 0.5) * W, num(o.cy, 0.5) * H, Math.abs(num(o.rx, 0.1) * W), Math.abs(num(o.ry, 0.1) * H), 0, 0, Math.PI * 2); paint();
+      } else if (o.type === "path" && Array.isArray(o.points) && o.points.length > 1) {
+        const pts = o.points.map(p => [num(p?.[0], 0) * W, num(p?.[1], 0) * H]);
+        x.beginPath(); x.moveTo(pts[0][0], pts[0][1]);
+        if (o.smooth && pts.length > 2) { for (let i = 1; i < pts.length - 1; i++) x.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + pts[i + 1][0]) / 2, (pts[i][1] + pts[i + 1][1]) / 2); const l = pts[pts.length - 1]; x.lineTo(l[0], l[1]); }
+        else for (const p of pts.slice(1)) x.lineTo(p[0], p[1]);
+        if (o.closed) x.closePath(); paint();
+      } else if (o.type === "gradient" && Array.isArray(o.stops)) {
+        const g = o.kind === "radial" ? x.createRadialGradient(num(o.x0, 0.5) * W, num(o.y0, 0.5) * H, 0, num(o.x0, 0.5) * W, num(o.y0, 0.5) * H, Math.max(1, num(o.r, 0.5) * W))
+          : x.createLinearGradient(num(o.x0, 0) * W, num(o.y0, 0) * H, num(o.x1, 1) * W, num(o.y1, 1) * H);
+        for (const s of o.stops) { try { g.addColorStop(Math.max(0, Math.min(1, num(s?.[0], 0))), s?.[1]); } catch {} }
+        x.fillStyle = g; x.fillRect(0, 0, W, H);
+      }
+    } catch {} finally { x.restore(); }
+  }
+}
+async function svgToLayer(svg, name) {
+  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+  const root = doc.documentElement;
+  if (!root || root.nodeName.toLowerCase() !== "svg" || doc.querySelector("parsererror")) throw new Error("the artwork came back malformed");
+  root.querySelectorAll("script, foreignObject, image, use[href^='http'], a").forEach(n => n.remove());
+  for (const el of root.querySelectorAll("*")) for (const at of [...el.attributes]) if (/^on/i.test(at.name) || /^\s*(javascript|https?):/i.test(at.value)) el.removeAttribute(at.name);
+  if (!root.getAttribute("viewBox")) root.setAttribute("viewBox", `0 0 ${S.w} ${S.h}`);
+  root.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  root.setAttribute("width", S.w); root.setAttribute("height", S.h);
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(root)], { type: "image/svg+xml" }));
+  try {
+    const img = new Image(); img.width = S.w; img.height = S.h; img.src = url; await img.decode();
+    const l = makeLayer(String(name).slice(0, 40)); l.canvas.getContext("2d").drawImage(img, 0, 0, S.w, S.h); return l;
+  } finally { URL.revokeObjectURL(url); }
+}
+
+/* ---------- Agent connection ---------- */
+const AGENT_KEY = "fastedit.agent.v1";
+const PROVIDER_NAMES = { builtin: "Fast Edit AI", anthropic: "Your Anthropic key", webhook: "Your agent", claude: "Claude on claude.ai" };
+let agent = { provider: "", accessCode: "", anthropicKey: "", url: "", token: "" };
+try { Object.assign(agent, JSON.parse(localStorage.getItem(AGENT_KEY) || "{}")); } catch {}
+const saveAgent = () => { try { localStorage.setItem(AGENT_KEY, JSON.stringify(agent)); } catch {} };
+const agentLabel = () => PROVIDER_NAMES[agent.provider] || "AI";
+function agentReady() {
+  switch (agent.provider) {
+    case "builtin": return !!builtinInfo?.configured && (!builtinInfo.accessCodeRequired || !!agent.accessCode);
+    case "anthropic": return !!agent.anthropicKey && !!builtinInfo;
+    case "webhook": return /^https?:\/\//i.test(agent.url);
+    case "claude": return !!sample;
+  }
+  return false;
+}
+const agentSendsImages = () => agent.provider === "claude" ? canImages : true;
+function renderAgent() {
+  $("#agentName").textContent = agentLabel();
+  const sub = $("#agentSub"), dot = $("#agentDot"), ok = agentReady();
+  dot.className = "agentdot " + (ok ? "ok" : "bad");
+  $("#aiGo").disabled = busy;
+  let msg;
+  if (agent.provider === "builtin") msg = !builtinInfo ? "The built-in AI can't be reached from here." : !builtinInfo.configured ? "Not set up on this site. Connect your own key or agent." : builtinInfo.accessCodeRequired && !agent.accessCode ? "Needs an access code." : "Ready · " + builtinInfo.model;
+  else if (agent.provider === "anthropic") msg = !agent.anthropicKey ? "Add your API key." : !builtinInfo ? "Needs this site's server, which can't be reached here." : "Ready · key ending " + agent.anthropicKey.slice(-4);
+  else if (agent.provider === "webhook") msg = ok ? "Ready · " + new URL(agent.url).host : "Add your agent's URL.";
+  else if (agent.provider === "claude") msg = ok ? (canImages ? "Ready · sees your image" : "Ready · text only") : "Not available in this view.";
+  else msg = "Choose an AI agent.";
+  sub.textContent = msg;
+  setStatus(ok ? "Ready. Describe an edit, or pick a suggestion below." : "Connect an AI agent to use the AI tool. Every other tool works without one.", !ok);
+}
+
+const blobToB64 = (b) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = no; r.readAsDataURL(b); });
+function parseLoose(text) {
+  if (text && typeof text === "object") return text;
+  const t = String(text ?? "").trim();
+  try { return JSON.parse(t); } catch {}
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) { try { return JSON.parse(fence[1]); } catch {} }
+  const a = t.search(/[\[{]/), b = Math.max(t.lastIndexOf("}"), t.lastIndexOf("]"));
+  if (a >= 0 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch {} }
+  throw { code: "invalid_json", text: t };
+}
+async function postJSON(url, body, headers, signal) {
+  let r;
+  try { r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body), signal }); }
+  catch (e) { throw e?.name === "AbortError" ? { code: "cancelled" } : { code: "network" }; }
+  const ct = r.headers.get("content-type") || "";
+  const data = ct.includes("json") ? await r.json().catch(() => null) : await r.text();
+  if (!r.ok) throw { code: (data && data.code) || (r.status === 429 ? "rate_limited" : "agent_error"), message: (data && (data.error || data.message)) || `The agent answered ${r.status}.` };
+  return data;
+}
+async function callAI(prompt, opts = {}) {
+  const { signal, images, task = "edit" } = opts;
+  const img = images?.[0] ? { media_type: images[0].type || "image/jpeg", data: await blobToB64(images[0]) } : null;
+  if (agent.provider === "claude") {
+    const r = await sample(prompt, { signal, cache: false, ...(images ? { images } : {}) });
+    return r.text;
+  }
+  if (agent.provider === "builtin" || agent.provider === "anthropic") {
+    const headers = agent.provider === "anthropic" ? { "x-anthropic-key": agent.anthropicKey } : (agent.accessCode ? { "x-access-code": agent.accessCode } : {});
+    const d = await postJSON("/api/ai", { prompt, image: img }, headers, signal);
+    return d.text;
+  }
+  if (agent.provider === "webhook") {
+    const headers = agent.token ? { authorization: "Bearer " + agent.token } : {};
+    const d = await postJSON(agent.url, { protocol: "fastedit.agent/v1", task, prompt, image: img }, headers, signal);
+    if (typeof d === "string") return d;
+    if (d && typeof d === "object") { for (const k of ["text", "output", "result", "content"]) if (typeof d[k] === "string") return d[k]; return d; }
+    throw { code: "agent_error", message: "Your agent's reply was empty." };
+  }
+  throw { code: "not_configured" };
+}
+const aiJSON = async (prompt, opts) => parseLoose(await callAI(prompt, opts));
+
+/* Dialog */
+const dlg = $("#agentDlg");
+function openAgentDialog() {
+  const p = agent.provider || "builtin";
+  $$('input[name="provider"]').forEach(r => r.checked = r.value === p);
+  $("#accessCode").value = agent.accessCode; $("#anthropicKey").value = agent.anthropicKey;
+  $("#agentUrl").value = agent.url; $("#agentToken").value = agent.token;
+  $("#claudeProv").hidden = !sample;
+  $("#accessField").hidden = !builtinInfo?.accessCodeRequired;
+  $("#builtinDesc").textContent = !builtinInfo ? "Not reachable from this page (it needs the Fast Edit server)." : builtinInfo.configured ? `Claude (${builtinInfo.model}), run by this Fast Edit site.` : "Not set up on this site yet: the owner hasn't added an Anthropic key.";
+  $("#testResult").textContent = "";
+  if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
+}
+function readDialog() {
+  return { provider: ($('input[name="provider"]:checked') || {}).value || "builtin", accessCode: $("#accessCode").value.trim(), anthropicKey: $("#anthropicKey").value.trim(), url: $("#agentUrl").value.trim(), token: $("#agentToken").value.trim() };
+}
+$("#btnAgent").onclick = openAgentDialog;
+dlg.addEventListener("close", () => {
+  if (dlg.returnValue !== "save") return;
+  agent = readDialog(); saveAgent(); renderAgent(); toast("AI agent: " + agentLabel());
+});
+$("#agentTest").onclick = async () => {
+  const prev = agent; agent = readDialog();
+  const out = $("#testResult");
+  if (!agentReady()) { out.textContent = "Fill in the details for this option first."; agent = prev; return; }
+  out.textContent = "Testing…"; out.style.color = "";
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 60000);
+  try {
+    const r = await aiJSON('Connection test from Fast Edit. Reply with only this JSON: {"ok": true}', { signal: ctl.signal, task: "ping" });
+    out.textContent = r && r.ok ? "Connected. The agent answered." : "The agent answered, but not with the expected JSON.";
+    out.style.color = r && r.ok ? "var(--ok)" : "var(--accent)";
+  } catch (e) { out.textContent = ERR[e?.code] || e?.message || "Couldn't connect."; out.style.color = "var(--danger)"; }
+  finally { clearTimeout(t); agent = prev; }
+};
+
+async function initAgents() {
+  // This site's server (built-in AI and the "your key" relay)
+  const probe = fetch("/api/ai", { headers: { accept: "application/json" } })
+    .then(r => r.ok && (r.headers.get("content-type") || "").includes("json") ? r.json() : null)
+    .then(j => { builtinInfo = j; }).catch(() => { builtinInfo = null; });
+  // claude.ai runtime, when the page is open as a Claude artifact
+  const inClaude = (async () => {
+    if (!window.claude?.use) return;
+    claude.use("downloads").then(d => { downloads = d; }).catch(() => {});
+    try { sample = await claude.use("sample"); } catch { sample = null; }
+    if (sample) { const lim = await sample.limits().catch(() => null); canImages = !!lim?.images && lim.images.mediaTypes.includes("image/jpeg"); }
+  })();
+  await Promise.all([probe, inClaude]);
+  if (!agent.provider) agent.provider = sample ? "claude" : (builtinInfo?.configured ? "builtin" : "builtin");
+  renderAgent();
+}
+
+/* ---------- Boot ---------- */
+setTool("brush");
+(function boot() {
+  const w = 1600, h = 1067;
+  S.w = w; S.h = h;
+  const bg = makeLayer("Sample: alpine dusk (generated)", sampleScene(w, h));
+  S.layers.push(bg); S.active = bg.id;
+  sizeDoc(); syncAdj(); renderLayers(); updUndo();
+  requestAnimationFrame(() => { zoomFit(); doRender(); });
+  window.addEventListener("resize", () => { clearTimeout(window.__rz); window.__rz = setTimeout(zoomFit, 120); });
+  initAgents();
+})();
+})();
+</script>
+</body>
+</html>

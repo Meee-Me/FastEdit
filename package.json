@@ -1,0 +1,11 @@
+{
+  "name": "fastedit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fast Edit: a layer-based photo editor in the browser with an AI tool and bring-your-own-agent support.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0"
+  }
+}
