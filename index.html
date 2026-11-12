@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Fast Edit</title>
-<meta name="description" content="Fast Edit is a layer-based photo editor in your browser with an AI tool. Use the built-in AI, your own Anthropic key, or connect your own agent.">
+<meta name="description" content="Fast Edit is a layer-based photo editor with its own on-device AI, built from scratch. Or connect your own agent.">
 <meta name="theme-color" content="#15171b">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2315171b'/%3E%3Cpath d='M18 4 8 18h7l-2 10 11-15h-7z' fill='%23f0a43a'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -118,6 +118,13 @@ textarea#aiPrompt { width: 100%; min-height: 82px; resize: vertical; background:
 .ai-actions .btn.primary { flex: 1; padding: 9px; }
 .ai-status { font-size: 12px; color: var(--muted); line-height: 1.45; }
 .ai-status.warn { color: var(--danger); }
+details.about { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+details.about summary { cursor: pointer; font-weight: 600; font-size: 12.5px; }
+.about-body { font-size: 12.5px; line-height: 1.5; color: var(--fg); }
+.about-body ul { padding-left: 18px; margin: 6px 0; display: grid; gap: 6px; }
+.about-body p { margin: 8px 0 0; }
+.understood { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.understood span { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
 .log { display: flex; flex-direction: column; gap: 8px; }
 .entry { border-radius: 8px; padding: 9px 11px; line-height: 1.45; font-size: 12.5px; }
 .entry.you { background: var(--panel-2); align-self: flex-end; max-width: 90%; }
@@ -302,7 +309,19 @@ details.proto pre { background: var(--bg); border: 1px solid var(--line); border
         <button class="btn" id="aiStop" hidden>Stop</button>
       </div>
       <div class="chips" id="aiChips"></div>
-      <div class="ai-status" id="aiStatus">Checking AI connection…</div>
+      <div class="ai-status" id="aiStatus">Starting Fast Edit AI…</div>
+      <details class="about" id="aboutAI"><summary>About Fast Edit AI</summary>
+        <div class="about-body">
+          <p>Fast Edit AI is built from scratch and runs on your device. Nothing is uploaded.</p>
+          <ul>
+            <li><b>Language model:</b> a neural network that reads your request (words and letter patterns, so typos are fine) and picks from <span id="statIntents">47</span> editing skills. It has <span id="statParams">~100k</span> parameters and is trained in your browser each time the page loads (<span id="statTrain">…</span>).</li>
+            <li><b>Vision:</b> measures exposure, contrast, clipping and color cast, finds the palette, the subject (where the eye goes), the main light and the horizon.</li>
+            <li><b>Planner:</b> turns what you asked plus what it sees into edits: adjustments, smart crops, background removal and generated layers.</li>
+            <li><b>Generators:</b> draws stars, birds, flares, frames, captions, weather and more, placed to fit your photo.</li>
+          </ul>
+          <p class="hint">Try: “warmer with a soft vignette”, “crop to 4:5”, “add a caption that says "Hello"”, “remove the background”, “add birds and a moon”.</p>
+        </div>
+      </details>
       <div class="label">History</div>
       <div class="log" id="aiLog"><div class="empty-log">The AI sees the current image and answers with real edits: adjustments, crops, rotations, text, shapes, glows and generated artwork on new layers. Every AI edit is one Undo step.</div></div>
     </div>
@@ -342,21 +361,11 @@ details.proto pre { background: var(--bg); border: 1px solid var(--line); border
   <form method="dialog" id="agentForm">
     <div class="dlg-head">
       <h2 id="agentDlgTitle">Connect your agent</h2>
-      <p>Choose which AI powers Fast Edit's AI tool. Your choice and keys stay in this browser.</p>
+      <p>Use Fast Edit's own AI, or plug in your own agent. Your choice stays in this browser.</p>
     </div>
     <div class="dlg-body">
       <div class="prov">
-        <label><input type="radio" name="provider" value="builtin"><b>Fast Edit AI (built in)</b><span id="builtinDesc">Claude, run by this Fast Edit deployment.</span></label>
-        <div class="fields" id="accessField" hidden>
-          <div class="field"><label for="accessCode">Access code</label><input id="accessCode" type="password" autocomplete="off" placeholder="Ask the site owner for the code"></div>
-        </div>
-      </div>
-      <div class="prov">
-        <label><input type="radio" name="provider" value="anthropic"><b>Your Anthropic API key</b><span>Use Claude on your own account. Get a key at console.anthropic.com.</span></label>
-        <div class="fields">
-          <div class="field"><label for="anthropicKey">API key</label><input id="anthropicKey" type="password" autocomplete="off" placeholder="sk-ant-…"></div>
-          <div class="note">Saved only in this browser. Each request passes it through this site's server to Anthropic; the server never stores it.</div>
-        </div>
+        <label><input type="radio" name="provider" value="builtin"><b>Fast Edit AI (built in)</b><span>Our own AI, built from scratch. It runs entirely in your browser: no account, no key, and your photos never leave your device.</span></label>
       </div>
       <div class="prov">
         <label><input type="radio" name="provider" value="webhook"><b>Your own agent</b><span>Any HTTPS endpoint that speaks the Fast Edit agent protocol: your server, an automation tool, or a local agent.</span></label>
@@ -383,9 +392,6 @@ or the requested JSON object itself.
 Errors: non-2xx with { "error": "message" }.</pre></details>
         </div>
       </div>
-      <div class="prov" id="claudeProv" hidden>
-        <label><input type="radio" name="provider" value="claude"><b>Claude on claude.ai</b><span>Available because this page is open inside claude.ai. Uses your Claude plan.</span></label>
-      </div>
     </div>
     <div class="dlg-foot">
       <span id="testResult"></span>
@@ -397,6 +403,7 @@ Errors: non-2xx with { "error": "message" }.</pre></details>
 </dialog>
 <div id="toast" hidden></div>
 
+<script src="fastai.js"></script>
 <script>
 (() => {
 "use strict";
@@ -932,18 +939,17 @@ let toastT = 0;
 function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
 
 /* ---------- AI ---------- */
-let sample = null, canImages = false, aiMode = "edit", aiCtl = null, busy = false;
-let builtinInfo = null;
+let aiMode = "edit", aiCtl = null, busy = false;
 const CHIPS = {
-  edit: ["Auto-enhance this photo", "Golden-hour glow with a soft light leak", "Moody cinematic teal & orange", "High-contrast black and white", "Add a fitting caption in elegant type", "Crop to a stronger composition", "Draw a hand-drawn white frame"],
-  art: ["Flock of birds in the sky", "Bold geometric poster border", "Sparkles and lens flare over the light source", "Retro 70s sunset stripes overlay", "A full illustrated scene: lighthouse at night"],
+  edit: ["Auto-enhance", "Warmer with a soft vignette", "Cinematic teal & orange", "Black and white, high contrast", "Golden hour glow", "Add a caption", "Crop to a stronger composition", "Remove the background", "Add a hand-drawn frame"],
+  art: ["Flock of birds", "Starry night sky and a crescent moon", "Sparkles around the light", "Lens flare", "Retro synthwave sun", "Snowfall", "Bokeh lights", "Confetti", "Low fog", "Light leak"],
   critique: ["Critique this image"],
 };
 function renderChips() {
   const host = $("#aiChips"); host.innerHTML = "";
   for (const c of CHIPS[aiMode]) { const b = document.createElement("button"); b.className = "chip"; b.textContent = c; b.onclick = () => { $("#aiPrompt").value = c; runAI(); }; host.append(b); }
   $("#aiGo").textContent = { edit: "Apply with AI", art: "Generate layer", critique: "Get critique" }[aiMode];
-  $("#aiPrompt").placeholder = { edit: "Describe an edit, e.g. “warm golden-hour light, lift the shadows and add a subtle vignette”", art: "Describe artwork to draw on a new layer, e.g. “a crescent moon and stars in the upper sky”", critique: "Optional: what should Claude focus on? (composition, color, mood…)" }[aiMode];
+  $("#aiPrompt").placeholder = { edit: "Describe an edit, e.g. “warm golden-hour light, lift the shadows and add a subtle vignette”", art: "Describe artwork to draw on a new layer, e.g. “a crescent moon and stars in the upper sky”", critique: "Optional: what should the AI focus on? (composition, color, mood…)" }[aiMode];
 }
 $$(".seg button").forEach(b => b.onclick = () => { aiMode = b.dataset.mode; $$(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); renderChips(); });
 renderChips();
@@ -958,21 +964,17 @@ function logEntry(kind, text, extra) {
   log.prepend(d);
 }
 const ERR = {
-  access_code: "The built-in AI needs an access code. Open Connect agent to enter it, or use your own key or agent.",
-  not_configured: "The built-in AI isn't set up on this deployment. Open Connect agent to use your own Anthropic key or agent.",
-  bad_key: "Anthropic rejected that API key. Check it under Connect agent.",
+  not_understood: "I didn't understand that. Try something like “warmer with a vignette”, “crop to square”, or “add stars”.",
+  not_ready: "Fast Edit AI is still training. Try again in a second.",
   network: "Couldn't reach the AI. Check your connection or the agent URL.",
   agent_error: "Your agent returned an error.",
   timeout: "The AI took too long. Try a simpler request.",
-  not_granted: "Claude access was declined for this page. Reload the page to be asked again.",
   rate_limited: "Too many requests right now. Wait a minute, then try again.",
-  invalid_json: "Claude's reply couldn't be turned into an edit. Try rephrasing the request.",
-  image_rejected: "The image couldn't be sent to Claude. Try a smaller image.",
-  refused: "Claude declined this request.",
+  invalid_json: "The agent's reply couldn't be turned into an edit. Try rephrasing the request.",
+  image_rejected: "The image couldn't be sent to your agent. Try a smaller image.",
+  refused: "Your agent declined this request.",
   prompt_too_large: "That request is too long. Shorten it and try again.",
-  session_expired: "Your session expired. Reload the page to continue.",
-  sampling_disabled: "AI is turned off for this account.",
-  empty_completion: "Claude didn't return anything. Try again.",
+  empty_completion: "Your agent didn't return anything. Try again.",
 };
 async function imageBlob() {
   doRender();
@@ -1042,6 +1044,7 @@ async function runAI() {
   const t0 = Date.now(); const tick = setInterval(() => setStatus(`Working… ${Math.round((Date.now() - t0) / 1000)} s`), 1000);
   setStatus("Working…");
   try {
+    if (agent.provider === "builtin") { await runLocal(mode, req); return; }
     const opts = { signal: aiCtl.signal, cache: false, task: mode };
     if (agentSendsImages()) { const b = await imageBlob(); if (b) opts.images = [b]; }
     const hasImg = !!opts.images;
@@ -1073,15 +1076,38 @@ async function runAI() {
   } catch (e) {
     const code = e?.code;
     if (code === "cancelled") { setStatus("Stopped."); logEntry("err", "Stopped before finishing."); }
-    else { const msg = ERR[code] || (e instanceof Error ? "Couldn't apply that: " + e.message : e?.message || "Something went wrong. Try again."); setStatus(msg, true); logEntry("err", msg); if (["access_code","not_configured","bad_key"].includes(code)) openAgentDialog(); }
+    else { const msg = ERR[code] || (e instanceof Error ? "Couldn't apply that: " + e.message : e?.message || "Something went wrong. Try again."); setStatus(msg, true); logEntry("err", msg); }
   } finally { clearInterval(tick); setBusy(false); }
+}
+
+async function runLocal(mode, req) {
+  if (!FastAI.ready) { setStatus("Fast Edit AI is still training…"); await FastAI.train(); }
+  doRender();
+  const plan = FastAI.plan(mode === "critique" && !req ? "critique" : req, { mode, adj: { ...S.adj }, image: view });
+  if (plan.critique) {
+    const chips = document.createElement("div"); chips.className = "chips";
+    for (const sg of plan.critique.suggestions) { const b = document.createElement("button"); b.className = "chip"; b.textContent = sg; b.onclick = () => { $$(".seg button")[0].click(); $("#aiPrompt").value = sg; runAI(); }; chips.append(b); }
+    logEntry("ai", plan.critique.text, chips);
+    setStatus("Done. Fast Edit AI analyzed the current image on your device.");
+    return;
+  }
+  const extra = await applyPlan(plan);
+  const notes = [...plan.notes, ...(extra || [])];
+  let msg = FastAI.sentence(notes) || "Done.";
+  if (plan.missed.length) msg += ` I skipped “${plan.missed.join("”, “")}” because I didn't understand it.`;
+  const tags = document.createElement("div"); tags.className = "understood";
+  for (const u of plan.understood) { const t = document.createElement("span"); t.textContent = `${u.label} ${Math.round(u.p * 100)}%`; tags.append(t); }
+  logEntry("ai", msg, tags);
+  if (mode !== "critique") $("#aiPrompt").value = "";
+  setStatus("Done on your device. Undo reverts the whole edit.");
 }
 
 async function applyPlan(p) {
   if (!p || typeof p !== "object") throw { code: "invalid_json" };
   pushUndo();
+  const extra = [];
   const rot = [90, 180, 270].includes(+p.rotate) ? +p.rotate : 0; if (rot) rotateDoc(rot);
-  if (p.flip === "horizontal") flipDoc("h"); else if (p.flip === "vertical") flipDoc("v");
+  if (p.flip === "horizontal" || p.flip === "h") flipDoc("h"); else if (p.flip === "vertical" || p.flip === "v") flipDoc("v");
   const c = p.crop;
   if (c && [c.x, c.y, c.w, c.h].every(v => typeof v === "number") && c.w > 0.05 && c.h > 0.05 && (c.w < 0.999 || c.h < 0.999)) cropDoc(c.x * S.w, c.y * S.h, c.w * S.w, c.h * S.h);
   if (p.resetAdjustments) S.adj = { ...DEF };
@@ -1096,7 +1122,24 @@ async function applyPlan(p) {
     await drawOps(l.canvas.getContext("2d"), p.layer.ops);
     S.layers.push(l); S.active = l.id;
   }
+  if (p.removeBackground) {
+    const target = S.layers.find(l => l.visible) || S.layers[0];
+    const res = target && FastAI.removeBackground(target.canvas);
+    if (res?.ok) { target.canvas = res.canvas; extra.push(`removed the background from “${target.name}” (subject covers ${Math.round(res.subjectShare * 100)}% of the frame)`); }
+    else extra.push(res?.reason ? "tried to remove the background, but " + res.reason.charAt(0).toLowerCase() + res.reason.slice(1).replace(/\.$/, "") : "found no layer to cut out");
+  }
+  if (Array.isArray(p.jobs) && p.jobs.length) {
+    try { await Promise.all(Object.values(FONTS).map(f => document.fonts.load(`600 40px ${f}`))); } catch {}
+    doRender();
+    const A = FastAI.analyze(view);
+    for (const job of p.jobs) {
+      const r = FastAI.renderJob(job, A, view, { fonts: FONTS });
+      const l = makeLayer(r.name, r.canvas); l.blend = r.blend; l.opacity = r.opacity;
+      S.layers.push(l); S.active = l.id; if (r.msg) extra.push(r.msg);
+    }
+  }
   renderLayers(); render();
+  return extra;
 }
 async function drawOps(x, ops) {
   const W = S.w, H = S.h, num = (v, d) => (typeof v === "number" && isFinite(v) ? v : d);
@@ -1146,35 +1189,26 @@ async function svgToLayer(svg, name) {
 }
 
 /* ---------- Agent connection ---------- */
-const AGENT_KEY = "fastedit.agent.v1";
-const PROVIDER_NAMES = { builtin: "Fast Edit AI", anthropic: "Your Anthropic key", webhook: "Your agent", claude: "Claude on claude.ai" };
-let agent = { provider: "", accessCode: "", anthropicKey: "", url: "", token: "" };
+const AGENT_KEY = "fastedit.agent.v2";
+const PROVIDER_NAMES = { builtin: "Fast Edit AI", webhook: "Your agent" };
+let agent = { provider: "builtin", url: "", token: "" };
 try { Object.assign(agent, JSON.parse(localStorage.getItem(AGENT_KEY) || "{}")); } catch {}
+if (!PROVIDER_NAMES[agent.provider]) agent.provider = "builtin";
 const saveAgent = () => { try { localStorage.setItem(AGENT_KEY, JSON.stringify(agent)); } catch {} };
 const agentLabel = () => PROVIDER_NAMES[agent.provider] || "AI";
-function agentReady() {
-  switch (agent.provider) {
-    case "builtin": return !!builtinInfo?.configured && (!builtinInfo.accessCodeRequired || !!agent.accessCode);
-    case "anthropic": return !!agent.anthropicKey && !!builtinInfo;
-    case "webhook": return /^https?:\/\//i.test(agent.url);
-    case "claude": return !!sample;
-  }
-  return false;
-}
-const agentSendsImages = () => agent.provider === "claude" ? canImages : true;
+let trainPct = 0;
+function agentReady() { return agent.provider === "builtin" ? true : /^https?:\/\//i.test(agent.url); }
+const agentSendsImages = () => true;
 function renderAgent() {
   $("#agentName").textContent = agentLabel();
   const sub = $("#agentSub"), dot = $("#agentDot"), ok = agentReady();
-  dot.className = "agentdot " + (ok ? "ok" : "bad");
-  $("#aiGo").disabled = busy;
   let msg;
-  if (agent.provider === "builtin") msg = !builtinInfo ? "The built-in AI can't be reached from here." : !builtinInfo.configured ? "Not set up on this site. Connect your own key or agent." : builtinInfo.accessCodeRequired && !agent.accessCode ? "Needs an access code." : "Ready · " + builtinInfo.model;
-  else if (agent.provider === "anthropic") msg = !agent.anthropicKey ? "Add your API key." : !builtinInfo ? "Needs this site's server, which can't be reached here." : "Ready · key ending " + agent.anthropicKey.slice(-4);
-  else if (agent.provider === "webhook") msg = ok ? "Ready · " + new URL(agent.url).host : "Add your agent's URL.";
-  else if (agent.provider === "claude") msg = ok ? (canImages ? "Ready · sees your image" : "Ready · text only") : "Not available in this view.";
-  else msg = "Choose an AI agent.";
+  if (agent.provider === "builtin") {
+    if (FastAI.ready) { const st = FastAI.stats; msg = `Ready · on-device · ${Math.round(st.params / 1000)}k parameters`; dot.className = "agentdot ok"; }
+    else { msg = `Training on your device… ${Math.round(trainPct * 100)}%`; dot.className = "agentdot"; }
+  } else { msg = ok ? "Ready · " + new URL(agent.url).host : "Add your agent's URL."; dot.className = "agentdot " + (ok ? "ok" : "bad"); }
   sub.textContent = msg;
-  setStatus(ok ? "Ready. Describe an edit, or pick a suggestion below." : "Connect an AI agent to use the AI tool. Every other tool works without one.", !ok);
+  if (!busy) setStatus(ok ? (agent.provider === "builtin" && !FastAI.ready ? "Fast Edit AI is training on your device. It takes a couple of seconds." : "Ready. Describe an edit, or pick a suggestion below.") : "Add your agent's URL under Connect agent, or switch back to Fast Edit AI.", !ok);
 }
 
 const blobToB64 = (b) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = no; r.readAsDataURL(b); });
@@ -1200,41 +1234,24 @@ async function postJSON(url, body, headers, signal) {
 async function callAI(prompt, opts = {}) {
   const { signal, images, task = "edit" } = opts;
   const img = images?.[0] ? { media_type: images[0].type || "image/jpeg", data: await blobToB64(images[0]) } : null;
-  if (agent.provider === "claude") {
-    const r = await sample(prompt, { signal, cache: false, ...(images ? { images } : {}) });
-    return r.text;
-  }
-  if (agent.provider === "builtin" || agent.provider === "anthropic") {
-    const headers = agent.provider === "anthropic" ? { "x-anthropic-key": agent.anthropicKey } : (agent.accessCode ? { "x-access-code": agent.accessCode } : {});
-    const d = await postJSON("/api/ai", { prompt, image: img }, headers, signal);
-    return d.text;
-  }
-  if (agent.provider === "webhook") {
-    const headers = agent.token ? { authorization: "Bearer " + agent.token } : {};
-    const d = await postJSON(agent.url, { protocol: "fastedit.agent/v1", task, prompt, image: img }, headers, signal);
-    if (typeof d === "string") return d;
-    if (d && typeof d === "object") { for (const k of ["text", "output", "result", "content"]) if (typeof d[k] === "string") return d[k]; return d; }
-    throw { code: "agent_error", message: "Your agent's reply was empty." };
-  }
-  throw { code: "not_configured" };
+  const headers = agent.token ? { authorization: "Bearer " + agent.token } : {};
+  const d = await postJSON(agent.url, { protocol: "fastedit.agent/v1", task, prompt, image: img }, headers, signal);
+  if (typeof d === "string") return d;
+  if (d && typeof d === "object") { for (const k of ["text", "output", "result", "content"]) if (typeof d[k] === "string") return d[k]; return d; }
+  throw { code: "agent_error", message: "Your agent's reply was empty." };
 }
 const aiJSON = async (prompt, opts) => parseLoose(await callAI(prompt, opts));
 
 /* Dialog */
 const dlg = $("#agentDlg");
 function openAgentDialog() {
-  const p = agent.provider || "builtin";
-  $$('input[name="provider"]').forEach(r => r.checked = r.value === p);
-  $("#accessCode").value = agent.accessCode; $("#anthropicKey").value = agent.anthropicKey;
+  $$('input[name="provider"]').forEach(r => r.checked = r.value === agent.provider);
   $("#agentUrl").value = agent.url; $("#agentToken").value = agent.token;
-  $("#claudeProv").hidden = !sample;
-  $("#accessField").hidden = !builtinInfo?.accessCodeRequired;
-  $("#builtinDesc").textContent = !builtinInfo ? "Not reachable from this page (it needs the Fast Edit server)." : builtinInfo.configured ? `Claude (${builtinInfo.model}), run by this Fast Edit site.` : "Not set up on this site yet: the owner hasn't added an Anthropic key.";
   $("#testResult").textContent = "";
   if (typeof dlg.showModal === "function") dlg.showModal(); else dlg.setAttribute("open", "");
 }
 function readDialog() {
-  return { provider: ($('input[name="provider"]:checked') || {}).value || "builtin", accessCode: $("#accessCode").value.trim(), anthropicKey: $("#anthropicKey").value.trim(), url: $("#agentUrl").value.trim(), token: $("#agentToken").value.trim() };
+  return { provider: ($('input[name="provider"]:checked') || {}).value || "builtin", url: $("#agentUrl").value.trim(), token: $("#agentToken").value.trim() };
 }
 $("#btnAgent").onclick = openAgentDialog;
 dlg.addEventListener("close", () => {
@@ -1242,10 +1259,17 @@ dlg.addEventListener("close", () => {
   agent = readDialog(); saveAgent(); renderAgent(); toast("AI agent: " + agentLabel());
 });
 $("#agentTest").onclick = async () => {
-  const prev = agent; agent = readDialog();
-  const out = $("#testResult");
-  if (!agentReady()) { out.textContent = "Fill in the details for this option first."; agent = prev; return; }
-  out.textContent = "Testing…"; out.style.color = "";
+  const cfg = readDialog(), out = $("#testResult"); out.style.color = "";
+  if (cfg.provider === "builtin") {
+    out.textContent = "Testing…";
+    await FastAI.train();
+    const top = FastAI.classify("make it warmer")[0];
+    out.textContent = `Working. Understood “make it warmer” as ${top.intent} (${Math.round(top.p * 100)}% sure).`; out.style.color = "var(--ok)";
+    return;
+  }
+  const prev = agent; agent = cfg;
+  if (!agentReady()) { out.textContent = "Enter your agent's URL first."; agent = prev; return; }
+  out.textContent = "Testing…";
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 60000);
   try {
     const r = await aiJSON('Connection test from Fast Edit. Reply with only this JSON: {"ok": true}', { signal: ctl.signal, task: "ping" });
@@ -1255,21 +1279,14 @@ $("#agentTest").onclick = async () => {
   finally { clearTimeout(t); agent = prev; }
 };
 
-async function initAgents() {
-  // This site's server (built-in AI and the "your key" relay)
-  const probe = fetch("/api/ai", { headers: { accept: "application/json" } })
-    .then(r => r.ok && (r.headers.get("content-type") || "").includes("json") ? r.json() : null)
-    .then(j => { builtinInfo = j; }).catch(() => { builtinInfo = null; });
-  // claude.ai runtime, when the page is open as a Claude artifact
-  const inClaude = (async () => {
-    if (!window.claude?.use) return;
-    claude.use("downloads").then(d => { downloads = d; }).catch(() => {});
-    try { sample = await claude.use("sample"); } catch { sample = null; }
-    if (sample) { const lim = await sample.limits().catch(() => null); canImages = !!lim?.images && lim.images.mediaTypes.includes("image/jpeg"); }
-  })();
-  await Promise.all([probe, inClaude]);
-  if (!agent.provider) agent.provider = sample ? "claude" : (builtinInfo?.configured ? "builtin" : "builtin");
+function initAgents() {
   renderAgent();
+  FastAI.train((p) => { trainPct = p; if (agent.provider === "builtin") renderAgent(); }).then((st) => {
+    $("#statIntents").textContent = st.intents;
+    $("#statParams").textContent = st.params.toLocaleString();
+    $("#statTrain").textContent = `${st.examples.toLocaleString()} examples, ${st.epochs} passes, ${(st.ms / 1000).toFixed(1)} s on this device, ${Math.round(st.accuracy * 100)}% training accuracy`;
+    renderAgent();
+  });
 }
 
 /* ---------- Boot ---------- */
