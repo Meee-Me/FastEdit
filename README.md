@@ -47,7 +47,7 @@ Fast Edit is a Deluxe website. **Sign in with Deluxe Main** (top right) uses you
 
 - **My looks** (in both Adjust tabs) saves your current adjustments as a named look that works on photos and videos. Signed in, looks are kept in your Deluxe account (`Deluxe.data`, key `looks`) on every device. As a guest they stay in this browser and move into your account when you sign in.
 - Your photos and videos are never uploaded; only the looks are saved to Deluxe Main.
-- Deluxe Main must list Fast Edit's address (`https://fastedit.vercel.app`) as the `edit` website in its `worker/apps.js`, or sign-in is refused.
+- Deluxe Main must list Fast Edit's address (`https://fast-edit-nine.vercel.app`) as the `edit` website in its `worker/apps.js`, or sign-in is refused.
 
 ## Deploy
 
