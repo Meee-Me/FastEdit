@@ -53,7 +53,7 @@
   }
   function makeSample() {
     const w = 1280, h = 720, hz = h * 0.62, r = AI.rngFrom(7);
-    const m = { id: uid++, kind: "synthetic", name: "Sample: alpine timelapse (generated)", w, h, duration: 10, canvas: mk(w, h) };
+    const m = { id: uid++, kind: "synthetic", name: "Sample: alpine timelapse (generated)", w, h, duration: 10, canvas: mk(w, h), sample: true };
     m.ctx = m.canvas.getContext("2d");
     const mtn = mk(w, h), x = mtn.getContext("2d");
     const ridge = (base, amp, col, rough) => { x.fillStyle = col; x.beginPath(); x.moveTo(0, hz); let yy = base; for (let px = 0; px <= w; px += w / 90) { yy += (r() - 0.5) * amp * rough; yy = Math.max(base - amp, Math.min(base + amp * 0.3, yy)); x.lineTo(px, yy); } x.lineTo(w, hz); x.closePath(); x.fill(); };
@@ -108,7 +108,7 @@
     if (!vids.length) return FE.toast("Choose a video file (MP4, MOV or WebM)");
     busy(true, "Loading video…");
     pushUndo();
-    const replaceSample = V.clips.length && V.clips.every((c) => mediaOf(c).kind === "synthetic");
+    const replaceSample = V.clips.length && V.clips.every((c) => mediaOf(c).sample);
     if (replaceSample) { V.clips = []; V.overlays = []; }
     let added = 0;
     for (const f of vids) {
@@ -524,7 +524,7 @@
   function redrawSoon() { if (!P.playing) { draw(); updateTime(); } }
 
   /* ================= UI: controls ================= */
-  function busy(on, text) { $("#vBusy").hidden = !on; if (text) $("#vBusyText").textContent = text; $("#vAIGo").disabled = on; }
+  function busy(on, text) { $("#vBusy").hidden = !on; if (text) $("#vBusyText").textContent = text; }
   $("#vPlay").onclick = () => (P.playing ? pause() : play());
   $("#vPrev").onclick = () => { pause(); seek(P.t - 1 / FPS); };
   $("#vNext").onclick = () => { pause(); seek(P.t + 1 / FPS); };
@@ -695,53 +695,22 @@
   function updateExportProgress() { const T = total(), p = T ? P.t / T : 0; $("#vExpBar").style.width = Math.round(p * 100) + "%"; $("#vExpPct").textContent = `${Math.round(p * 100)}% · ${fmt(P.t)} of ${fmt(T)} · keep this tab open and visible`; }
   function finishExport() { if (!EXP) return; updateExportProgress(); draw(); setTimeout(() => { try { EXP && EXP.rec.state !== "inactive" && EXP.rec.stop(); } catch {} }, 250); }
 
-  /* ================= AI ================= */
-  let vMode = "edit";
-  const VCHIPS = {
-    edit: ["Make it 15 seconds with the best parts", "Remove the silent parts", "Clean up the audio and even out the volume", "Cinematic and vertical for TikTok", "Trim the first 2 seconds", "Slow motion", "Speed up 2x", "Fade in and fade out", "Split at scene changes", "Make voices clearer", "Mute the audio"],
-    art: ["Falling snow", "Rain", "Confetti", "Sparkles around the light", "Bokeh lights", "Floating hearts", "Add a caption", "Stars and a crescent moon", "Light leak"],
-    critique: ["Critique this frame"],
-  };
-  function renderVChips() {
-    const host = $("#vAIChips"); host.innerHTML = "";
-    for (const c of VCHIPS[vMode]) { const b = document.createElement("button"); b.className = "chip"; b.textContent = c; b.onclick = () => { $("#vAIPrompt").value = c; runAI(); }; host.append(b); }
-    $("#vAIGo").textContent = { edit: "Apply to video", art: "Add to video", critique: "Critique frame" }[vMode];
-    $("#vAIPrompt").placeholder = { edit: "e.g. “trim the first 3 seconds, slow motion, cinematic and vertical for TikTok”", art: "e.g. falling snow and a caption that says “Winter”", critique: "Optional: what to focus on" }[vMode];
-  }
-  $$("#vAIModes button").forEach((b) => (b.onclick = () => { vMode = b.dataset.vmode; $$("#vAIModes button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); renderVChips(); }));
-  $("#vAIGo").onclick = () => runAI();
-  $("#vAIPrompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); runAI(); } });
-  function vlog(kind, text, extra) {
-    const log = $("#vAILog"); log.querySelector(".empty-log")?.remove();
-    const d = document.createElement("div"); d.className = "entry " + kind;
-    if (kind === "ai") { const w = document.createElement("div"); w.className = "who"; w.textContent = "Fast Edit AI"; d.append(w); }
-    const t = document.createElement("div"); t.textContent = text; t.style.whiteSpace = "pre-wrap"; d.append(t); if (extra) d.append(extra); log.prepend(d);
-  }
-  async function runAI() {
-    if (!$("#vBusy").hidden) return;
-    const req = $("#vAIPrompt").value.trim(), mode = vMode;
-    if (!req && mode !== "critique") { $("#vAIPrompt").focus(); return FE.toast("Describe what you want first"); }
-    if (!V.clips.length) return FE.toast("Add a video first");
-    if (!AI.ready) { busy(true, "Fast Edit AI is training…"); await AI.train(); busy(false); }
-    vlog("you", (mode === "art" ? "Add: " : mode === "critique" ? "Critique" + (req ? ": " : "") : "") + req);
+  /* ================= AI (chat) ================= */
+  async function videoEdit(req) {
+    if (!V.clips.length) return { text: "Add a video first (tap **Add video**), then tell me what to do with it.", critique: true };
+    if (!AI.ready) { busy(true, "Fast Edit AI is learning…"); await AI.train(); busy(false); }
     pause(); await seek(P.t);
-    let plan;
-    try {
-      const frame = mk(PW, PH); renderFrame(frame.getContext("2d"), PW, PH, P.t, { noOverlays: true });
-      plan = AI.plan(mode === "critique" && !req ? "critique" : req, { mode: mode === "critique" ? "critique" : mode === "art" ? "video-art" : "video", adj: { ...V.adj }, image: frame });
-    } catch (e) { const msg = e?.code === "not_understood" ? "I didn't understand that. Try “trim the first 2 seconds”, “slow motion”, “add snow” or “vertical for TikTok”." : e?.message || "Something went wrong."; vlog("err", msg); return; }
-    if (plan.critique) {
-      const chips = document.createElement("div"); chips.className = "chips";
-      for (const sg of plan.critique.suggestions) { const b = document.createElement("button"); b.className = "chip"; b.textContent = sg; b.onclick = () => { $$("#vAIModes button")[0].click(); $("#vAIPrompt").value = sg; runAI(); }; chips.append(b); }
-      vlog("ai", `Frame at ${fmt(P.t)}. ` + plan.critique.text, chips); return;
-    }
+    const artish = /\b(draw|paint|generate|illustrat\w*|sketch|art|artwork)\b/i.test(req);
+    const frame = mk(PW, PH); renderFrame(frame.getContext("2d"), PW, PH, P.t, { noOverlays: true });
+    const plan = AI.plan(req, { mode: artish ? "video-art" : "video", adj: { ...V.adj }, image: frame });
+    if (plan.critique) return { text: `Looking at the frame at ${fmt(P.t)}: ` + plan.critique.text, chips: plan.critique.suggestions, critique: true };
     pushUndo();
     const notes = [...plan.notes.filter((n) => !/cinematic grade|cropped|composition/.test(n))], extra = [];
     if (plan.resetAdjustments) { V.adj = { ...DEF }; V.grade = 0; }
     for (const k of Object.keys(DEF)) if (typeof plan.adjustments[k] === "number" && k !== "sharpen") V.adj[k] = plan.adjustments[k];
     if (plan.understood.some((u) => u.intent === "cinematic")) notes.push("applied a cinematic grade");
     const A = AI.analyze(frameCanvasNoOverlays());
-    // timeline operations first, so overlays span the final length
+    let soundNote = false;
     const ops = plan.video.filter((op, i, all) => op.op !== "best" || all.findIndex((o) => o.op === "best") === i);
     for (const op of ops) {
       const T = total();
@@ -753,7 +722,7 @@
       else if (op.op === "mute") { V.muted = op.v; applyVolume(); extra.push(op.v ? "muted the audio" : "turned the audio back on"); }
       else if (op.op === "fade_in") { V.fadeIn = clamp(op.s, 0.2, T / 2); extra.push(`added a ${short(V.fadeIn)} fade in`); }
       else if (op.op === "fade_out") { V.fadeOut = clamp(op.s, 0.2, T / 2); extra.push(`added a ${short(V.fadeOut)} fade out`); }
-      else if (op.op === "ratio") { V.ratio = Math.abs(op.ar - baseAspect()) < 0.01 ? "original" : op.ar; resize(); extra.push(`reframed to ${op.ar === 1 ? "square" : op.ar < 1 ? "vertical " + (Math.abs(op.ar - 9 / 16) < 0.01 ? "9:16" : op.ar.toFixed(2) + ":1") : Math.abs(op.ar - 16 / 9) < 0.01 ? "16:9" : op.ar.toFixed(2) + ":1"}`); }
+      else if (op.op === "ratio") { V.ratio = Math.abs(op.ar - baseAspect()) < 0.01 ? "original" : op.ar; resize(); extra.push(`reframed it to ${op.ar === 1 ? "square" : op.ar < 1 ? "vertical " + (Math.abs(op.ar - 9 / 16) < 0.01 ? "9:16" : op.ar.toFixed(2) + ":1") : Math.abs(op.ar - 16 / 9) < 0.01 ? "16:9" : op.ar.toFixed(2) + ":1"}`); }
       else if (op.op === "follow") { V.follow = true; await runTracks(); extra.push("set the frame to follow the subject"); }
       else if (op.op === "scenes") extra.push(await runScenes(true));
       else if (op.op === "keep_last") { const s = Math.min(op.s, T - 0.2); cutRange(0, T - s); extra.push(`kept the last ${short(s)}`); }
@@ -765,10 +734,10 @@
         else {
           V.sfx = { ...V.sfx, [op.key]: true };
           const humHz = usedMedia().map((m) => m.audio && m.audio.hum).find(Boolean);
-          extra.push({ level: "evened out the loudness", hum: humHz ? `filtered out ${humHz} Hz hum and low rumble` : "cut low rumble (no mains hum found)", voice: "made voices clearer", bass: "boosted the bass" }[op.key]);
+          extra.push({ level: "evened out the loudness", hum: humHz ? `filtered out ${humHz} Hz hum and low rumble` : "cut low rumble (there was no electrical hum to remove)", voice: "made voices clearer", bass: "boosted the bass" }[op.key]);
         }
         rebuildAll();
-        if (!hasSound()) extra.push("this video has no sound yet, so you'll hear the change once you add one that does");
+        if (!hasSound()) soundNote = true;
       }
       else if (op.op === "volume") { V.volume = clamp(Math.round((V.volume + op.d) * 100) / 100, 0, 2); V.muted = false; applyVolume(); extra.push(`set the volume to ${Math.round(V.volume * 100)}%`); }
     }
@@ -777,12 +746,87 @@
       const msg = addOverlay(job, A); if (msg) extra.push(msg);
     }
     resize(); refreshAll(); await seek(Math.min(P.t, total()));
-    let msg = AI.sentence([...notes, ...extra]) || "Done.";
+    let msg = AI.sentence([...new Set([...notes, ...extra])]) || "Done.";
+    if (soundNote) msg += " This video has no sound, so you'll hear the audio changes once you add a video that does.";
     if (plan.missed.length) msg += ` I skipped “${plan.missed.join("”, “")}” because I didn't understand it.`;
-    const tags = document.createElement("div"); tags.className = "understood";
-    for (const u of plan.understood) { const t = document.createElement("span"); t.textContent = `${u.label} ${Math.round(u.p * 100)}%`; tags.append(t); }
-    vlog("ai", msg, tags); $("#vAIPrompt").value = "";
+    const ids = new Set(plan.understood.map((u) => u.intent)), chips = [];
+    if (!ids.has("fade_in") && !ids.has("fade_out")) chips.push("Fade in and fade out");
+    if (!ids.has("crop_ratio")) chips.push("Vertical for TikTok");
+    return { text: msg, tags: plan.understood.map((u) => `${u.label} ${Math.round(u.p * 100)}%`), chips };
   }
+
+  /* ---------- "make a video about …": animated title cards ---------- */
+  function scriptFor(topic) {
+    if (/fast\s*edit/i.test(topic)) return ["Fast Edit", "Photo and video editing, right in your browser", "With its own AI, built from scratch", "Color · Cuts · Captions · Sound", "Your files never leave your device", "Try it at fast-edit-nine.vercel.app"];
+    const T = topic.replace(/\b\w/g, (c) => c.toUpperCase());
+    return [T, `A short film about ${topic}`, "Made with Fast Edit"];
+  }
+  function makeCardMedia(topic) {
+    const lines = scriptFor(topic), per = 2.6, ar = V.ratio === "original" && !V.clips.some((c) => !mediaOf(c).sample) ? 16 / 9 : outAspect();
+    const w = ar >= 1 ? 1280 : 720, h = ar >= 1 ? Math.round(1280 / ar) : 1280;
+    const r = AI.rngFrom(AI.hashStr(topic)), hue = Math.round(r() * 360), font = FE.FONTS.display || "system-ui, sans-serif", body = FE.FONTS.sans || "system-ui, sans-serif";
+    const blobs = Array.from({ length: 7 }, () => ({ x: r(), y: r(), s: 0.25 + r() * 0.35, v: 0.02 + r() * 0.04, h: hue + (r() - 0.5) * 90 }));
+    const m = { id: uid++, kind: "synthetic", name: `Video: ${topic}`, w, h, duration: lines.length * per, canvas: mk(w, h), generated: true };
+    m.ctx = m.canvas.getContext("2d");
+    const ease = (x) => 1 - Math.pow(1 - clamp(x, 0, 1), 3);
+    m.draw = (c, t) => {
+      const i = Math.min(lines.length - 1, Math.floor(t / per)), lt = t - i * per, minS = Math.min(w, h);
+      const g = c.createLinearGradient(0, 0, w, h); g.addColorStop(0, `hsl(${hue},45%,12%)`); g.addColorStop(1, `hsl(${(hue + 50) % 360},55%,22%)`);
+      c.globalAlpha = 1; c.globalCompositeOperation = "source-over"; c.fillStyle = g; c.fillRect(0, 0, w, h);
+      c.globalCompositeOperation = "screen";
+      for (const b of blobs) { const x = ((b.x + t * b.v) % 1.4 - 0.2) * w, y = (b.y + Math.sin(t * 0.6 + b.x * 6) * 0.05) * h, R = b.s * Math.max(w, h); const gg = c.createRadialGradient(x, y, 0, x, y, R); gg.addColorStop(0, `hsla(${b.h},80%,55%,.35)`); gg.addColorStop(1, `hsla(${b.h},80%,55%,0)`); c.fillStyle = gg; c.fillRect(0, 0, w, h); }
+      c.globalCompositeOperation = "source-over";
+      const inP = ease(lt / 0.6), outP = clamp((lt - (per - 0.45)) / 0.45, 0, 1), alpha = inP * (1 - outP);
+      const big = i === 0, size = big ? minS * 0.16 : minS * 0.075, text = lines[i];
+      c.save(); c.globalAlpha = alpha; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#fff";
+      c.font = `${big ? 800 : 600} ${size}px ${big ? font : body}`;
+      // wrap
+      const maxW = w * 0.82, words = text.split(" "), rows = []; let cur = "";
+      for (const wd of words) { const tt = cur ? cur + " " + wd : wd; if (c.measureText(tt).width > maxW && cur) { rows.push(cur); cur = wd; } else cur = tt; } rows.push(cur);
+      const lh = size * 1.18, y0 = h / 2 - ((rows.length - 1) * lh) / 2 + (1 - inP) * minS * 0.04;
+      c.shadowColor = "rgba(0,0,0,.35)"; c.shadowBlur = size * 0.4;
+      rows.forEach((row, k) => c.fillText(row, w / 2, y0 + k * lh));
+      c.shadowBlur = 0; c.fillStyle = "#f0a43a"; const barW = minS * 0.12 * inP; c.fillRect(w / 2 - barW / 2, y0 + (rows.length - 1) * lh + size * 0.9, barW, Math.max(3, minS * 0.008));
+      c.restore();
+    };
+    m.draw(m.ctx, 0.8); m.thumb = thumbFrom(m.canvas, w, h);
+    return { m, lines };
+  }
+  async function makeVideo(topic) {
+    if (!topic) return { text: "I'd love to! What should the video be about? For example: “make a video about Fast Edit” or “make a video about my trip to Rome”.", chips: ["Make a video about Fast Edit", "Make a video about summer"] };
+    try { await document.fonts.load(`800 60px ${FE.FONTS.display}`); } catch {}
+    pause(); pushUndo();
+    const { m, lines } = makeCardMedia(topic); V.media.push(m);
+    const onlySample = V.clips.every((c) => mediaOf(c).sample);
+    if (onlySample) { V.clips = [{ id: uid++, mediaId: m.id, in: 0, out: m.duration, speed: 1 }]; V.overlays = []; }
+    else V.clips.unshift({ id: uid++, mediaId: m.id, in: 0, out: m.duration, speed: 1 });
+    V.sel = V.clips[0].id; V.fadeIn = Math.max(V.fadeIn, 0.5); V.fadeOut = Math.max(V.fadeOut, 0.8);
+    resize(); refreshAll();
+    addOverlay({ kind: "bokeh", clause: "", k: 0.7 }, AI.analyze(frameCanvasNoOverlays()), { start: 0, end: m.duration });
+    refreshAll(); await seek(0);
+    const len = short(m.duration);
+    return {
+      text: onlySample
+        ? `Here's a ${len} video about **${topic}**: ${lines.length} animated title cards (“${lines.slice(0, 2).join("”, “")}”…) over a moving color background with drifting bokeh lights, a fade in and a fade out. Press **Play** to watch, or **Export video** to save it.`
+        : `I added a ${len} animated intro about **${topic}** (${lines.length} title cards) at the start of your timeline, with drifting bokeh lights and fades. Press **Play** to watch it.`,
+      chips: ["Vertical for TikTok", "Add falling snow", "Export it"],
+    };
+  }
+  let videoChat = null;
+  function mountVideoChat() {
+    videoChat = window.FEChat.mount($("#videoChat"), {
+      mode: "video",
+      placeholder: "Message Fast Edit AI…",
+      welcome: "Hi! I'm **Fast Edit AI**. I can edit your video: trim and shorten it, add transitions and captions, grade the color, clean up the sound, or make a whole video from a topic. What should we make?",
+      starters: ["Make a video about Fast Edit", "Make it 15 seconds with the best parts", "Vertical for TikTok", "Remove the silent parts", "What can you do?"],
+      edit: videoEdit,
+      undo: () => { const had = undoS.length > 0; if (had) undo(); return had; },
+      makeVideo: (topic) => makeVideo(topic),
+      makePoster: async () => ({ text: "Posters are made in Photo mode. Switch to **Photo** at the top and ask me there.", chips: ["Make a video about Fast Edit"] }),
+    });
+    if (window.__feAIStatus) videoChat.setStatus(window.__feAIStatus, AI.ready ? "ok" : "");
+  }
+  $$("#vTabs button").forEach((b) => b.addEventListener("click", () => { if (b.dataset.vtab === "export") exportInfo(); }));
   function frameCanvasNoOverlays() { const c = mk(PW, PH); renderFrame(c.getContext("2d"), PW, PH, P.t, { noOverlays: true }); return c; }
 
   /* ================= mode switching & keys ================= */
@@ -792,7 +836,7 @@
     $$("[data-app-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.appMode === mode)));
     try { localStorage.setItem("fastedit.mode", mode); } catch {}
     if (video) {
-      if (!started) { started = true; const m = makeSample(); V.media.push(m); V.clips.push({ id: uid++, mediaId: m.id, in: 0, out: m.duration, speed: 1 }); V.sel = V.clips[0].id; renderVChips(); }
+      if (!started) { started = true; const m = makeSample(); V.media.push(m); V.clips.push({ id: uid++, mediaId: m.id, in: 0, out: m.duration, speed: 1 }); V.sel = V.clips[0].id; }
       requestAnimationFrame(() => { resize(); refreshAll(); seek(P.t); exportInfo(); });
     } else { pause(); }
     window.dispatchEvent(new Event("resize"));
@@ -810,9 +854,10 @@
     else if (k === "s") $("#vSplit").click();
     else if (k === "delete" || k === "backspace") { if (V.selOv) $("#vOvDel").click(); else deleteClip(); }
   });
+  mountVideoChat();
   let saved = "photo"; try { saved = localStorage.getItem("fastedit.mode") || "photo"; } catch {}
   if (saved === "video") setMode("video");
-  window.FEVideo = { V, seek, total, play, pause, addFiles, get exporting() { return !!EXP; },
+  window.FEVideo = { V, seek, total, play, pause, addFiles, makeVideo, get exporting() { return !!EXP; },
     getAdj: () => ({ ...V.adj }),
     applyLook(adj) { pushUndo(); V.adj = { ...DEF }; for (const k of Object.keys(DEF)) if (typeof adj[k] === "number" && k !== "sharpen") { const [mn, mx] = k in FE.RANGE ? FE.RANGE[k] : [-100, 100]; V.adj[k] = Math.round(clamp(adj[k], mn, mx)); } syncAdj(); redrawSoon(); },
   };

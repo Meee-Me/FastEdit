@@ -16,6 +16,26 @@ Everything lives in [`fastai.js`](fastai.js), with no libraries or outside servi
 
 Try: `warmer with a soft vignette`, `cinematic teal & orange, crop to 16:9`, `add a caption that says "Hello"`, `remove the background`, `add birds and a crescent moon`, `make it snow`.
 
+## Chat with Fast Edit AI
+
+The AI tab is a chat, in the style of ChatGPT or Claude, with one conversation for photos and one for videos. Fast Edit AI decides whether each message is conversation or an edit:
+
+- **Edits**: "make it warmer and add a vignette", "blur the background", "trim the first 2 seconds", "vertical for TikTok".
+- **Follow-ups**: "stronger", "a bit less", "undo that".
+- **Questions**: "how do I crop?", "how do I export?", "is my photo uploaded anywhere?" are answered from a built-in guide to Fast Edit.
+- **Creating**: "make a video about Fast Edit" builds an animated title-card video; "make a poster about Summer Sale" designs a poster from your photo.
+- **Small talk**: hello, thanks, "who are you", "what can you do", and a joke if you ask.
+
+It's still the on-device AI built from scratch, not a large language model: it can't answer general knowledge questions, and it says so politely.
+
+## Pro photo tools
+
+- **Menu bar**: File (new, open, place, open/save `.fedit` project, export), Edit (fill, clear, copy/cut to new layer), Image (Curves & Levels, auto tone, image size, crop to selection, rotate, flip), Layer (new, duplicate, delete, merge down, flatten), Select (all, deselect, inverse, select subject, feather, grow), Filter, View.
+- **Selections**: rectangle, ellipse, lasso and magic wand (Shift adds, Alt subtracts), plus AI **Select subject**. Brushes, fills, gradients, the clone stamp and filters stay inside the selection.
+- **Tools**: shapes (rectangle, rounded, ellipse, line, arrow), gradient (linear, radial, to transparent), paint bucket, clone stamp.
+- **Filters with live preview**: Gaussian blur, motion blur, unsharp mask, add noise, pixelate, emboss, find edges, posterize, threshold, invert.
+- **Curves & Levels**: master and per-channel curves over a live histogram, plus input/output levels.
+
 ## Video mode
 
 Switch to **Video** at the top. Everything runs on your device in [`video.js`](video.js).

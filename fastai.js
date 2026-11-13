@@ -108,6 +108,8 @@
     moon: ["moon", "add a moon", "crescent moon", "full moon", "moonlight", "lunar", "a moon in the sky"],
     sunset_stripes: ["sunset stripes", "retro stripes", "70s stripes", "rainbow stripes", "stripes overlay", "retro sunset", "synthwave", "vaporwave", "outrun", "stripes", "retro sun"],
     clouds: ["clouds", "add clouds", "fluffy clouds", "cloudy sky", "mist", "fog", "foggy", "misty", "haze over the horizon", "low fog"],
+    blur_background: ["blur the background", "background blur", "portrait mode", "make the background blurry", "depth of field", "soften the background", "blurry background", "focus on the subject", "defocus the background", "blur behind the person"],
+    select_subject: ["select the subject", "select the person", "select the main object", "make a selection of the subject", "select whats in front", "mask the subject", "select the foreground"],
     remove_bg: ["remove the backround", "remove backround", "background remover", "make the background transparent", "take out the background", "remove background", "remove the background", "cut out", "background removal", "transparent background", "isolate subject", "delete background", "erase background", "cutout", "extract subject", "no background", "remove bg"],
     reset: ["reset", "start over", "undo everything", "remove all edits", "original look", "clear adjustments", "revert", "go back to original", "reset adjustments"],
     critique: ["critique", "feedback", "what do you think", "review my photo", "how can i improve", "rate it", "analyze", "suggestions", "any tips", "is it good", "rate my photo", "critique this image", "give me feedback"],
@@ -132,7 +134,17 @@
     volume_down: ["quieter", "turn it down", "lower the volume", "make it quieter", "reduce the volume", "volume down", "turn the sound down", "make the audio quieter", "too loud"],
     best_parts: ["highlights only", "just the highlights", "highlights", "the highlights", "show only the highlights", "make it 15 seconds with the best parts", "highlight reel", "keep the best moments", "make a highlights video", "best bits only", "shorten it to the best parts", "make a short version", "keep the most interesting parts", "make a 30 second highlight", "summarize the video", "make a recap", "cut it down to the good parts", "best moments"],
     audio_reset: ["remove audio effects", "reset the sound", "original audio", "undo the audio cleanup", "turn off the sound effects", "reset audio", "no audio filters"],
-    unknown: ["hello", "hi there", "how are you", "what is the weather", "hows the weather today", "what day is it", "tell me about yourself", "where am i", "tell me a joke", "who are you", "asdf", "qwerty", "banana", "ok", "thanks", "write code", "what time is it", "play music", "order pizza", "lorem ipsum", "the meaning of life", "send an email", "book a flight", "yes", "no", "cat", "dog"],
+    greet: ["hello", "hi", "hi there", "hey", "hey there", "good morning", "good evening", "yo", "whats up", "howdy", "hello fast edit", "how are you", "hows it going"],
+    thanks: ["thanks", "thank you", "thank you so much", "great job", "awesome", "perfect", "nice", "cool", "love it", "looks great", "amazing", "well done", "that is good", "wow"],
+    identity: ["who are you", "what are you", "are you chatgpt", "are you claude", "what model are you", "who made you", "tell me about yourself", "are you an ai", "what ai is this", "how do you work"],
+    capabilities: ["what can you do", "help", "help me", "what can you edit", "show me what you can do", "what commands do you know", "give me some examples", "what should i ask", "list your features", "what are your skills", "ideas"],
+    undo_last: ["undo that", "revert that", "go back", "i dont like it", "undo", "take that back", "remove that edit", "undo the last change", "that looks bad"],
+    stronger: ["more", "stronger", "even more", "do it again", "more of that", "a bit more", "increase it", "again", "go further", "push it more", "not enough"],
+    weaker: ["less", "too much", "too strong", "weaker", "less of that", "dial it back", "not so much", "a little less", "thats too much", "overdone", "make that subtler"],
+    make_video: ["make a video about fast edit", "make a video about my trip", "create a promo video", "make an intro video", "make a slideshow about", "create a video for my brand", "make a short video about cats", "make a trailer", "make a title sequence", "create a video about", "make me a video", "generate a video"],
+    make_poster: ["make a poster about", "create a poster for", "design a poster", "make a flyer", "make a thumbnail", "create a cover image", "make a title card picture"],
+    joke: ["tell me a joke", "say something funny", "make me laugh", "do you know any jokes"],
+    unknown: ["what is the weather", "hows the weather today", "what day is it", "where am i", "asdf", "qwerty", "banana", "write code", "what time is it", "play music", "order pizza", "lorem ipsum", "the meaning of life", "send an email", "book a flight", "who won the game", "whats the capital of france", "solve this math problem", "translate this", "cat", "dog"],
   };
   const LABELS = Object.keys(INTENTS);
   const K = LABELS.length;
@@ -702,9 +714,9 @@
   const RANGE = { hue: [-180, 180], fade: [0, 100], sepia: [0, 100], mono: [0, 100], vignette: [0, 100], grain: [0, 100], blur: [0, 100], sharpen: [0, 100] };
   const rng = (k) => RANGE[k] || [-100, 100];
   const ART = new Set(["light_leak", "glow", "flare", "stars", "birds", "sparkles", "snow", "rain", "bokeh", "confetti", "hearts", "moon", "sunset_stripes", "clouds", "frame", "add_text"]);
-  const PRETTY = { auto_enhance: "auto-enhance", brighten: "brighter", darken: "darker", contrast_up: "more contrast", contrast_down: "less contrast", warmer: "warmer", cooler: "cooler", saturate: "more color", desaturate: "less color", black_white: "black & white", sepia: "sepia", vintage: "vintage film", cinematic: "cinematic", moody: "moody", golden_hour: "golden hour", vignette_add: "vignette", vignette_remove: "no vignette", grain_add: "grain", grain_remove: "no grain", sharpen: "sharpen", soften: "soften", shadows_up: "lift shadows", highlights_down: "recover highlights", fix_color: "white balance", crop_smart: "smart crop", crop_ratio: "crop to ratio", rotate: "rotate", flip: "flip", add_text: "text", frame: "frame", light_leak: "light leak", glow: "glow", flare: "lens flare", stars: "stars", birds: "birds", sparkles: "sparkles", snow: "snow", rain: "rain", bokeh: "bokeh", confetti: "confetti", hearts: "hearts", moon: "moon", sunset_stripes: "retro sun", clouds: "clouds", remove_bg: "remove background", reset: "reset", critique: "critique", trim_start: "trim start", trim_end: "trim end", shorten: "shorten", slow_down: "slow motion", speed_up: "speed up", normal_speed: "normal speed", mute: "mute", unmute: "unmute", scene_split: "split scenes", fade_in: "fade in", fade_out: "fade out", reframe: "follow subject", remove_silence: "remove silence", level_audio: "even out loudness", reduce_hum: "reduce hum", voice_boost: "clearer voices", bass_boost: "bass boost", volume_up: "louder", volume_down: "quieter", best_parts: "best parts", audio_reset: "reset sound" };
+  const PRETTY = { auto_enhance: "auto-enhance", brighten: "brighter", darken: "darker", contrast_up: "more contrast", contrast_down: "less contrast", warmer: "warmer", cooler: "cooler", saturate: "more color", desaturate: "less color", black_white: "black & white", sepia: "sepia", vintage: "vintage film", cinematic: "cinematic", moody: "moody", golden_hour: "golden hour", vignette_add: "vignette", vignette_remove: "no vignette", grain_add: "grain", grain_remove: "no grain", sharpen: "sharpen", soften: "soften", shadows_up: "lift shadows", highlights_down: "recover highlights", fix_color: "white balance", crop_smart: "smart crop", crop_ratio: "crop to ratio", rotate: "rotate", flip: "flip", add_text: "text", frame: "frame", light_leak: "light leak", glow: "glow", flare: "lens flare", stars: "stars", birds: "birds", sparkles: "sparkles", snow: "snow", rain: "rain", bokeh: "bokeh", confetti: "confetti", hearts: "hearts", moon: "moon", sunset_stripes: "retro sun", clouds: "clouds", remove_bg: "remove background", blur_background: "blur background", select_subject: "select subject", reset: "reset", critique: "critique", trim_start: "trim start", trim_end: "trim end", shorten: "shorten", slow_down: "slow motion", speed_up: "speed up", normal_speed: "normal speed", mute: "mute", unmute: "unmute", scene_split: "split scenes", fade_in: "fade in", fade_out: "fade out", reframe: "follow subject", remove_silence: "remove silence", level_audio: "even out loudness", reduce_hum: "reduce hum", voice_boost: "clearer voices", bass_boost: "bass boost", volume_up: "louder", volume_down: "quieter", best_parts: "best parts", audio_reset: "reset sound" };
   const VIDEO_INTENTS = new Set(["trim_start", "trim_end", "shorten", "slow_down", "speed_up", "normal_speed", "mute", "unmute", "scene_split", "fade_in", "fade_out", "reframe", "remove_silence", "level_audio", "reduce_hum", "voice_boost", "bass_boost", "volume_up", "volume_down", "best_parts", "audio_reset"]);
-  const PHOTO_ONLY = new Set(["rotate", "flip", "remove_bg"]);
+  const PHOTO_ONLY = new Set(["rotate", "flip", "remove_bg", "blur_background", "select_subject"]);
   function secondsIn(c) {
     const s = String(c).toLowerCase();
     if (/half a second/.test(s)) return 0.5;
@@ -760,6 +772,7 @@
       if (!c.text || FILLER.test(normalize(c.text))) continue;
       const top = classify(c.text)[0];
       if (top.intent === "unknown" || top.p < 0.38) { missed.push(c.text); continue; }
+      if (CHAT_INTENTS.has(top.intent)) continue;
       understood.push({ intent: top.intent, p: top.p, clause: c.text, quote: c.quote !== undefined ? quotes[+c.quote] : undefined });
     }
     // dedupe: keep the strongest instance of each intent; a bare quote merges into a text intent
@@ -771,7 +784,7 @@
     }
     if (mode === "critique" || intents.some((u) => u.intent === "critique")) return { critique: critique(A), analysis: A, understood: intents.filter((u) => u.intent === "critique") };
 
-    const adj = { ...cur }, notes = [], jobs = [], video = []; let crop = null, rotate = 0, flip = null, reset = false, removeBg = false;
+    const adj = { ...cur }, notes = [], jobs = [], video = []; let crop = null, rotate = 0, flip = null, reset = false, removeBg = false, blurBg = 0, selectSubject = false;
     const isVideo = mode === "video" || mode === "video-art";
     const addA = (k, v) => { const [a, b] = rng(k); adj[k] = Math.round(clamp((adj[k] || 0) + v, a, b)); };
     const atLeast = (k, v) => { const [a, b] = rng(k); adj[k] = Math.round(clamp(Math.max(adj[k] || 0, v), a, b)); };
@@ -854,6 +867,8 @@
         case "rotate": rotate = /180|upside/i.test(cl) ? 180 : /left|counter|anti/i.test(cl) ? 270 : 90; notes.push(`rotated ${rotate === 270 ? "left" : rotate === 180 ? "180°" : "right"}`); break;
         case "flip": flip = /vertical|upside|top/i.test(cl) ? "v" : "h"; notes.push(flip === "v" ? "flipped vertically" : "mirrored horizontally"); break;
         case "remove_bg": removeBg = true; break;
+        case "blur_background": blurBg = Math.min(2, k); break;
+        case "select_subject": selectSubject = true; break;
         case "add_text": { const text = u.quote || textFromRequest(request, quotes) || caption(A, request); jobs.push({ kind: "text", clause: cl, k, text, color: colorIn(cl) }); break; }
         case "frame": jobs.push({ kind: "frame", clause: cl, k, color: colorIn(cl) }); break;
         case "abstract": jobs.push({ kind: "abstract", clause: cl, k }); break;
@@ -861,7 +876,7 @@
       }
     }
     if (!intents.length) throw { code: "not_understood", missed, message: missed.length ? `I didn't understand “${missed.join("”, “")}”.` : "Tell me what to change." };
-    return { adjustments: adj, resetAdjustments: reset, crop, rotate, flip, removeBackground: removeBg, jobs, video, notes, missed, understood: intents.filter((u) => u.intent !== "abstract").map((u) => ({ intent: u.intent, label: PRETTY[u.intent] || u.intent, p: u.p })) };
+    return { adjustments: adj, resetAdjustments: reset, crop, rotate, flip, removeBackground: removeBg, blurBackground: blurBg, selectSubject, jobs, video, notes, missed, understood: intents.filter((u) => u.intent !== "abstract").map((u) => ({ intent: u.intent, label: PRETTY[u.intent] || u.intent, p: u.p })) };
   }
   function sentence(parts) {
     const p = parts.filter(Boolean); if (!p.length) return "";
@@ -869,10 +884,91 @@
     return titleCase(s) + ".";
   }
 
+
+  /* ================= conversation ================= */
+  const CHAT_INTENTS = new Set(["greet", "thanks", "identity", "capabilities", "undo_last", "stronger", "weaker", "make_video", "make_poster", "joke"]);
+  // A small guide to Fast Edit, answered by matching the question's words.
+  const FAQ = [
+    { k: "crop cropping trim edges frame ratio square", photo: "Pick the **Crop** tool on the left (or press C), drag over the picture, then tap **Apply crop**. You can lock a ratio like 1:1 or 4:5 in the toolbar. Or just ask me: “crop to 4:5” or “crop to a stronger composition”.", video: "In **Edit › Framing**, choose a shape like 9:16 for TikTok or 1:1. Turn on **Follow the subject** and the frame tracks the main subject. Or ask me: “vertical for TikTok”." },
+    { k: "export save download png jpeg jpg webp mp4 file", photo: "Tap **Export** at the top right and choose PNG, JPEG or WebP. To keep editing later with all your layers, use **File › Save project** (a .fedit file).", video: "Open the **Export** tab, choose 480p, 720p or 1080p and tap **Export video**. It plays through once in real time, so keep the tab open." },
+    { k: "layer layers blend opacity merge duplicate", photo: "The **Layers** tab lists every layer. Tap one to make it active, use the eye to hide it, and set opacity and blend mode below. **Layer** in the menu bar has new, duplicate, merge down and flatten." },
+    { k: "select selection marquee lasso wand subject mask", photo: "Use the **Select** tool (M): rectangle, ellipse, lasso or magic wand. Hold Shift to add and Alt to subtract. **Select › Select subject** finds the main subject for you. Brushes, fills and filters then only change the selected area." },
+    { k: "filter filters blur sharpen noise pixelate emboss", photo: "The **Filter** menu has blur, motion blur, unsharp mask, noise, pixelate, emboss, find edges, posterize, threshold and invert, each with a live preview. With a selection active they only touch the selection." },
+    { k: "curves levels histogram tone contrast", photo: "**Image › Curves & Levels** (Ctrl+M) opens the curve editor in the Adjust tab. Click the curve to add points and drag them; Levels sets the black point, midtones and white point.", video: "The **Adjust** tab has the color sliders and presets for the whole video, plus a teal-and-orange movie grade." },
+    { k: "undo redo mistake back", photo: "Press **Undo** at the top (Ctrl+Z), or tell me “undo that”. Every AI edit is one undo step.", video: "Press **Undo** in the video toolbar (Ctrl+Z), or tell me “undo that”." },
+    { k: "add video import open clip", video: "Tap **Add video** (or drop files on the preview). You can add several; they play one after another on the timeline.", photo: "Switch to **Video** at the top, then tap **Add video**." },
+    { k: "split cut trim shorten scene", video: "Move the playhead and tap **Split at playhead** (S). Select a clip to set its start and end. Or ask me: “trim the first 2 seconds”, “make it 15 seconds with the best parts” or “split at scene changes”." },
+    { k: "sound audio silence hum noise loud music volume", video: "In **Edit › Sound** you can remove silent parts, even out loudness, reduce hum, make voices clearer and boost bass. Or ask: “remove the silent parts” or “clean up the audio”." },
+    { k: "speed slow motion fast timelapse", video: "Select a clip and pick a speed in **Edit › Selected clip**, or ask me “slow motion” or “speed up 2x”." },
+    { k: "text caption title words font", photo: "Use the **Text** tool (T): type in the toolbar, then click the picture. Or ask me “add a caption that says \"Hello\"”.", video: "In **Edit › Text**, type the words and tap **Add text at playhead**. Or ask: “add a caption that says \"Hello\"”." },
+    { k: "background remove cutout transparent", photo: "Ask me “remove the background”, or use **Select › Select subject** and then **Edit › Clear**. It works best when the subject stands out from a plain background." },
+    { k: "sign account deluxe login looks sync", photo: "Tap **Sign in with Deluxe Main** at the top right. Your saved looks then follow you to every device. Signing in is optional.", video: "Tap **Sign in with Deluxe Main** at the top right. Your saved looks then follow you to every device." },
+    { k: "privacy upload uploaded anywhere server private data cloud safe leave device", photo: "Your photos and videos never leave your device. I run entirely in your browser. Only your saved looks are stored in your Deluxe account, and only if you sign in." },
+    { k: "shortcut shortcuts keyboard keys hotkey", photo: "B brush, E eraser, T text, I eyedropper, C crop, M select, U shape, G gradient, K bucket, S clone, H pan, [ ] brush size, Ctrl+Z undo, Ctrl+A select all, Ctrl+D deselect, Ctrl+J copy to new layer, Ctrl+M curves, Ctrl+S save project.", video: "Space play/pause, ← → step one frame (Shift for a second), S split, Delete removes the selected clip, Ctrl+Z undo." },
+    { k: "look looks preset presets save style", photo: "Set up adjustments, then in **Adjust › My looks** name it and tap **Save current look**. Looks work on photos and videos." },
+    { k: "clone stamp heal spot retouch blemish", photo: "Use the **Clone stamp** (S): Alt-click (or tap **Pick source**) where to copy from, then paint over the spot." },
+    { k: "gradient shape rectangle ellipse arrow fill bucket", photo: "The **Shape** tool (U) draws rectangles, ellipses, lines and arrows on a new layer. **Gradient** (G) fills with a linear or radial blend, and the **Paint bucket** (K) fills areas of similar color." },
+  ];
+  const STOP = new Set("how do i can you the a an to my of in on is it what where why does and or with for this that me please your you be".split(" "));
+  function faq(text, mode) {
+    const words = normalize(text).split(" ").filter((w) => w && !STOP.has(w)), stem = (w) => w.replace(/(ing|ed|es|s)$/, "");
+    let best = null;
+    for (const e of FAQ) {
+      const keys = e.k.split(" ").map(stem); let sc = 0;
+      for (const w of words) if (keys.includes(stem(w))) sc++;
+      const ans = e[mode] || e.photo || e.video;
+      if (sc && ans && (!best || sc > best.sc)) best = { sc, ans };
+    }
+    return best && best.sc >= 1 ? best.ans : null;
+  }
+  const isQuestion = (t) => /^\s*(how|where|why|what\s+(is|does|are)|which|is there|can i|do you know how|explain)\b/i.test(t) || (/\?\s*$/.test(t) && !/^\s*(can|could|would|will)\s+you\b/i.test(t));
+  function topicOf(t) {
+    const m = String(t).match(/\b(?:about|for|on|of|called|named|titled)\s+(.{2,60})$/i);
+    if (!m) return null;
+    const topic = m[1].replace(/[.!?]+$/, "").trim();
+    return /^fast\s*edit$/i.test(topic) ? "Fast Edit" : topic;
+  }
+  const JOKES = ["Why did the photo go to therapy? It had too many negative memories.", "I told my video editor a joke about cropping. It didn't make the cut.", "Why don't pixels ever get lost? They always know their place on the grid.", "My camera and I broke up. It said I only liked it for its lens."];
+  let jokeN = 0;
+  // Decides whether a message is conversation (answered in words) or an edit (handed to the planner).
+  function converse(text, mode) {
+    const t = String(text || "").trim();
+    if (!t) return { kind: "empty" };
+    if (!net.ready) return { kind: "not_ready" };
+    const { clauses } = splitClauses(t);
+    const top = classify(t)[0];
+    const video = mode === "video";
+    if (/\b(make|create|generate|build|produce)\b.*\b(video|promo|trailer|intro|slideshow|reel|title sequence)\b/i.test(t)) return { kind: "make_video", topic: topicOf(t) || (/fast\s*edit/i.test(t) ? "Fast Edit" : null) };
+    if (/\b(make|create|design|generate)\b.*\b(poster|flyer|thumbnail|cover)\b/i.test(t)) return { kind: "make_poster", topic: topicOf(t) };
+    if (isQuestion(t)) { const a = faq(t, video ? "video" : "photo"); if (a) return { kind: "answer", text: a }; }
+    if (CHAT_INTENTS.has(top.intent) && top.p >= 0.45 && clauses.length <= 1) {
+      switch (top.intent) {
+        case "greet": return { kind: "answer", text: video ? "Hi! I'm Fast Edit AI. Tell me what to do with your video, like “trim the first 2 seconds”, “cinematic and vertical for TikTok” or “add falling snow”. You can also ask me how anything works." : "Hi! I'm Fast Edit AI. Tell me what to do with your photo, like “make it warmer”, “remove the background” or “add a caption”. You can also ask me how anything works.", chips: video ? ["Make it 15 seconds with the best parts", "Cinematic and vertical for TikTok", "What can you do?"] : ["Auto-enhance", "Blur the background", "What can you do?"] };
+        case "thanks": return { kind: "answer", text: "Happy to help! Want to try something else?", chips: video ? ["Add falling snow", "Fade in and fade out", "Critique this frame"] : ["Add a vignette", "Critique this photo", "Golden hour glow"] };
+        case "identity": return { kind: "answer", text: `I'm Fast Edit AI, an assistant built from scratch for this editor. I'm not ChatGPT or Claude: I'm a small neural network (about ${Math.round((net.stats?.params || 100000) / 1000)}k parameters) that learned ${net.stats?.intents || 70} editing skills right here in your browser, plus my own image analysis and drawing tools. Nothing you edit is uploaded.`, chips: ["What can you do?"] };
+        case "capabilities": return { kind: "answer", text: video ? "For videos I can trim and shorten (keeping the best parts), split at scene changes, change speed, add fades, reframe for TikTok and follow the subject, grade the color, add captions and moving effects like snow or confetti, and clean up the sound: remove silences, even out loudness, reduce hum, clearer voices. I can also make a whole video for you from a topic." : "For photos I can auto-enhance, fix white balance, change light and color, apply looks like vintage or cinematic, crop smartly, select or remove the subject, blur the background, and add captions, frames, stars, birds, flares and more. I can also critique your photo and answer questions about any tool.", chips: video ? ["Make a video about Fast Edit", "Remove the silent parts", "Vertical for TikTok"] : ["Select the subject", "Blur the background", "Critique this photo"] };
+        case "undo_last": return { kind: "undo" };
+        case "stronger": return { kind: "stronger" };
+        case "weaker": return { kind: "weaker" };
+        case "joke": return { kind: "answer", text: JOKES[jokeN++ % JOKES.length], chips: ["Another one", "Back to editing"] };
+        case "make_video": return { kind: "make_video", topic: topicOf(t) };
+        case "make_poster": return { kind: "make_poster", topic: topicOf(t) };
+      }
+    }
+    return { kind: "edit" };
+  }
+  function fallback(text, mode) {
+    const a = faq(text, mode === "video" ? "video" : "photo");
+    if (a) return { text: a };
+    return { text: mode === "video"
+      ? "I'm an on-device editing assistant, so I can only help with your video. I didn't catch an edit in that. Try one of these, or ask me “what can you do?”."
+      : "I'm an on-device editing assistant, so I can only help with your photo. I didn't catch an edit in that. Try one of these, or ask me “what can you do?”.",
+      chips: mode === "video" ? ["Trim the first 2 seconds", "Add falling snow", "Make a video about Fast Edit"] : ["Make it warmer", "Remove the background", "Add a caption"] };
+  }
   global.FastAI = {
     version: "1.0",
     train, get ready() { return net.ready; }, get stats() { return net.stats; },
-    classify, analyze, plan, renderJob, removeBackground, critique, sentence, rngFrom, hashStr,
+    classify, analyze, plan, renderJob, removeBackground, critique, sentence, rngFrom, hashStr, converse, fallback, faq, topicOf,
     skills: Object.keys(PRETTY).map((k) => PRETTY[k]),
   };
 })(window);
