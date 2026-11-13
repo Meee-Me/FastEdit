@@ -35,6 +35,7 @@ It's still the on-device AI built from scratch, not a large language model: it c
 - **Tools**: shapes (rectangle, rounded, ellipse, line, arrow), gradient (linear, radial, to transparent), paint bucket, clone stamp.
 - **Filters with live preview**: Gaussian blur, motion blur, unsharp mask, add noise, pixelate, emboss, find edges, posterize, threshold, invert.
 - **Curves & Levels**: master and per-channel curves over a live histogram, plus input/output levels.
+- **Layer masks**: hide parts of a layer without erasing them. Add a mask (or one from a selection), click its thumbnail, then the brush hides and the eraser reveals. Turn it off, apply it or delete it. Masks follow crops, rotations, resizes, merges and project files.
 
 ## Video mode
 
@@ -50,14 +51,19 @@ Switch to **Video** at the top. Everything runs on your device in [`video.js`](v
   - **Reduce hum and rumble** detects 50 or 60 Hz mains hum and notches it and its harmonics out, plus a low cut.
   - **Clearer voices** (presence EQ) and **bass boost**.
 - **Color tab**: lift / gamma / gain color wheels, master and per-channel curves, and live waveform, vectorscope and histogram scopes.
-- **Transitions** between clips: crossfade, dip to black or white, wipe, slide and zoom, per cut or on every cut.
+- **Transitions** between clips: crossfade, dip to black or white, wipe, slide and zoom, per cut or on every cut. When the outgoing clip has footage past its cut, it keeps playing through the transition instead of freezing.
+- **Keyframe animation**: captions, effects and overlays have position, size and opacity that can change over time. Add keyframes at the playhead (moving a slider sets one), or use presets: fly in, pop, slide across, slow push, fade. Or ask the AI to "animate the text".
+- **Video and photos on top**: a second track for picture-in-picture, logos or reaction videos, placed, sized and keyframed like any overlay.
 - **Music track**: add an MP3, WAV or M4A, set its volume and start, and let it **duck** automatically whenever someone speaks. It fades out at the end and is included in exports.
 - **Photos as clips**, shown for 4 seconds by default, with an optional slow zoom.
 - **Timeline**: zoom in and out (Ctrl + scroll), drag clip edges to trim, and see each clip's sound as a waveform.
 - **Smart shortening:** "make it 15 seconds" keeps the moments with the most movement, sound and color, in order. "Keep the first 10 seconds" or "keep 3 to 8 seconds" still cut exactly.
 - **Scene detection:** finds hard cuts by comparing frames and splits the timeline there.
 - **Fast Edit AI:** understands requests like "trim the first 2 seconds, slow motion and fade in", "cinematic and vertical for TikTok", "split at scene changes", "speed up 2x and mute", or "falling snow and a caption that says “Winter”".
-- **Export:** 480p, 720p or 1080p at 30 fps, recorded in the browser (MP4 where the browser supports it, otherwise WebM). Export plays the video through once in real time, so keep the tab visible.
+- **Export:** 480p, 720p or 1080p at 30 fps as MP4.
+  - **Frame by frame (exact)**, the default where the browser supports WebCodecs: each frame is rendered and encoded individually, the sound is mixed offline (clips at their speed with the sound effects, music with fades and ducking), and it keeps working if you switch tabs. Titles, photos and effects render faster than real time; camera footage is usually slower, because each frame is located individually in the source.
+  - **Real time**: records the video while it plays through once. Keep the tab visible.
+  - MP4 packaging uses [mp4-muxer](https://github.com/Vanilagy/mp4-muxer) (MIT, in `vendor/`).
 
 ## Photo editor
 

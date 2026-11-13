@@ -353,7 +353,8 @@
       apply: (v) => {
         const W = clamp(Math.round(v.w), 16, 8000), H = clamp(Math.round(v.h), 16, 8000), kx = W / S.w, ky = H / S.h; if (W === S.w && H === S.h) return;
         FE.pushUndo();
-        for (const l of S.layers) { const c = mk(Math.max(1, l.canvas.width * kx), Math.max(1, l.canvas.height * ky)), x = c.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(l.canvas, 0, 0, c.width, c.height); l.canvas = c; l.x = Math.round(l.x * kx); l.y = Math.round(l.y * ky); }
+        const rs = (src) => { const c = mk(Math.max(1, src.width * kx), Math.max(1, src.height * ky)), x = c.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(src, 0, 0, c.width, c.height); return c; };
+        for (const l of S.layers) { l.canvas = rs(l.canvas); if (l.mask) l.mask = rs(l.mask); l.x = Math.round(l.x * kx); l.y = Math.round(l.y * ky); }
         S.w = W; S.h = H; S.sel = null; FE.sizeDoc(); FE.zoomFit(); FE.renderLayers(); FE.render(); toast(`Resized to ${W} × ${H}`);
       },
     });
@@ -370,14 +371,14 @@
   function flatten() {
     if (S.layers.length < 2) return toast("There's only one layer");
     FE.pushUndo(); const c = mk(S.w, S.h), x = c.getContext("2d");
-    for (const l of S.layers) { if (!l.visible) continue; x.globalAlpha = l.opacity; x.globalCompositeOperation = l.blend; x.drawImage(l.canvas, l.x, l.y); }
+    for (const l of S.layers) { if (!l.visible) continue; x.globalAlpha = l.opacity; x.globalCompositeOperation = l.blend; x.drawImage(FE.maskedCopy(l), l.x, l.y); }
     S.layers = [FE.makeLayer("Background", c)]; S.active = S.layers[0].id; FE.renderLayers(); FE.render(); toast("Flattened to one layer");
   }
   function autoTone() { const plan = window.FastAI.plan("auto enhance", { mode: "edit", adj: { ...S.adj }, image: (FE.doRender(), FE.view) }); FE.pushUndo(); Object.assign(S.adj, plan.adjustments); FE.syncAdj(); FE.render(); toast("Auto tone applied"); }
 
   // .fedit project files: layers as PNG, plus adjustments and curves
   function saveProject() {
-    const proj = { app: "fastedit", v: 1, w: S.w, h: S.h, adj: S.adj, tone: S.tone, active: S.layers.findIndex((l) => l.id === S.active), layers: S.layers.map((l) => ({ name: l.name, visible: l.visible, opacity: l.opacity, blend: l.blend, x: l.x, y: l.y, png: l.canvas.toDataURL("image/png") })) };
+    const proj = { app: "fastedit", v: 1, w: S.w, h: S.h, adj: S.adj, tone: S.tone, active: S.layers.findIndex((l) => l.id === S.active), layers: S.layers.map((l) => ({ name: l.name, visible: l.visible, opacity: l.opacity, blend: l.blend, x: l.x, y: l.y, png: l.canvas.toDataURL("image/png"), mask: l.mask ? l.mask.toDataURL("image/png") : null, maskOn: l.maskOn !== false })) };
     const blob = new Blob([JSON.stringify(proj)], { type: "application/json" }), url = URL.createObjectURL(blob), a = document.createElement("a");
     a.href = url; a.download = `fastedit-project-${S.w}x${S.h}.fedit`; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000);
     toast(`Saved the project (${(blob.size / 1048576).toFixed(1)} MB)`);
@@ -388,7 +389,8 @@
     try {
       const p = JSON.parse(await f.text()); if (p.app !== "fastedit" || !Array.isArray(p.layers)) throw new Error("not a project");
       const layers = [];
-      for (const L of p.layers) { const img = new Image(); img.src = L.png; await img.decode(); const c = mk(img.naturalWidth, img.naturalHeight); c.getContext("2d").drawImage(img, 0, 0); layers.push(FE.makeLayer(String(L.name || "Layer"), c, { visible: L.visible !== false, opacity: +L.opacity || 1, blend: L.blend || "source-over", x: +L.x || 0, y: +L.y || 0 })); }
+      const load = async (url) => { const img = new Image(); img.src = url; await img.decode(); const c = mk(img.naturalWidth, img.naturalHeight); c.getContext("2d").drawImage(img, 0, 0); return c; };
+      for (const L of p.layers) { const c = await load(L.png); layers.push(FE.makeLayer(String(L.name || "Layer"), c, { visible: L.visible !== false, opacity: +L.opacity || 1, blend: L.blend || "source-over", x: +L.x || 0, y: +L.y || 0, mask: L.mask ? await load(L.mask) : null, maskOn: L.maskOn !== false })); }
       FE.pushUndo(); S.w = p.w; S.h = p.h; S.layers = layers; S.active = (layers[p.active] || layers[layers.length - 1]).id; S.adj = { ...FE.DEF, ...(p.adj || {}) }; S.tone = p.tone ? Tone.cloneTone(p.tone) : Tone.defaultTone(); S.sel = null;
       FE.sizeDoc(); FE.zoomFit(); FE.syncAdj(); FE.renderLayers(); FE.render(); toneUI && toneUI.draw(); toast(`Opened ${f.name}`);
     } catch (e) { toast("That file isn't a Fast Edit project"); }
@@ -399,7 +401,7 @@
     ["File", [["New…", () => $("#btnNew").click(), "Ctrl+Alt+N"], ["Open image…", () => $("#btnOpen").click(), "Ctrl+O"], ["Place image as layer…", () => $("#lyPlace").click()], "-", ["Open project…", () => projIn.click()], ["Save project", saveProject, "Ctrl+S"], "-", ["Export PNG", () => $('[data-export="png"]').click()], ["Export JPEG", () => $('[data-export="jpeg"]').click()], ["Export WebP", () => $('[data-export="webp"]').click()]]],
     ["Edit", [["Undo", () => FE.doUndo(), "Ctrl+Z"], ["Redo", () => FE.doRedo(), "Ctrl+Shift+Z"], "-", ["Fill with color", fillSel], ["Clear selection area", clearSel, "Del", true], "-", ["Copy to new layer", () => viaCopy(false), "Ctrl+J", true], ["Cut to new layer", () => viaCopy(true), "Ctrl+Shift+J", true]]],
     ["Image", [["Curves & Levels…", () => openTone(), "Ctrl+M"], ["Auto tone", autoTone, "Ctrl+Shift+L"], "-", ["Image size…", imageSize, "Ctrl+Alt+I"], ["Crop to selection", cropToSel, "", true], "-", ["Rotate 90° left", () => { FE.pushUndo(); FE.rotateDoc(270); }], ["Rotate 90° right", () => { FE.pushUndo(); FE.rotateDoc(90); }], ["Rotate 180°", () => { FE.pushUndo(); FE.rotateDoc(180); }], ["Flip horizontal", () => { FE.pushUndo(); FE.flipDoc("h"); }], ["Flip vertical", () => { FE.pushUndo(); FE.flipDoc("v"); }]]],
-    ["Layer", [["New layer", () => $("#lyNew").click(), "Ctrl+Shift+N"], ["Duplicate layer", () => $("#lyDup").click()], ["Delete layer", () => $("#lyDel").click()], "-", ["Merge down", () => $("#lyMerge").click(), "Ctrl+E"], ["Flatten image", flatten], "-", ["Layers panel", () => document.querySelector('#t-layers').click()]]],
+    ["Layer", [["New layer", () => $("#lyNew").click(), "Ctrl+Shift+N"], ["Duplicate layer", () => $("#lyDup").click()], ["Delete layer", () => $("#lyDel").click()], "-", ["Merge down", () => $("#lyMerge").click(), "Ctrl+E"], ["Flatten image", flatten], "-", ["Add layer mask", () => FE.mask.add(false)], ["Mask from selection", () => FE.mask.add(true), "", true], ["Apply layer mask", () => FE.mask.apply()], ["Delete layer mask", () => FE.mask.remove()], "-", ["Layers panel", () => document.querySelector('#t-layers').click()]]],
     ["Select", [["All", sel.all, "Ctrl+A"], ["Deselect", sel.none, "Ctrl+D", true], ["Inverse", sel.invert, "Ctrl+Shift+I"], "-", ["Select subject (AI)", () => sel.subject()], "-", ["Feather…", () => openDialog({ title: "Feather selection", fields: [{ k: "r", label: "Radius", min: 1, max: 100, v: 10, unit: "px" }], apply: (v) => sel.feather(v.r) }), "", true], ["Grow…", () => openDialog({ title: "Grow selection", fields: [{ k: "r", label: "By", min: 1, max: 100, v: 8, unit: "px" }], apply: (v) => sel.grow(v.r) }), "", true]]],
     ["Filter", Object.entries(FILTERS).map(([id, F]) => [F.name + (F.params.length ? "…" : ""), () => runFilter(id)])],
     ["View", [["Zoom in", () => FE.setZoom(S.zoom * 1.25), "Ctrl++"], ["Zoom out", () => FE.setZoom(S.zoom / 1.25), "Ctrl+−"], ["Fit on screen", () => FE.zoomFit(), "Ctrl+0"], ["Actual pixels", () => FE.setZoom(1), "Ctrl+1"]]],

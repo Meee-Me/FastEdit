@@ -149,6 +149,10 @@ input[type=range] { accent-color: var(--accent); height: 18px; }
 .layer .eye { width: 26px; height: 26px; border: 0; background: none; color: var(--muted); display: grid; place-items: center; padding: 0; }
 .layer .eye svg { width: 16px; height: 16px; }
 .layer.hidden-layer .name { color: var(--muted); text-decoration: line-through; }
+.layer .thumbs { display: flex; gap: 4px; }
+.layer .lthumb.target { outline: 2px solid var(--accent); outline-offset: 1px; }
+.layer .mthumb { cursor: pointer; } .layer .mthumb.off { opacity: .35; }
+.layer { grid-template-columns: 26px auto 1fr !important; }
 .layer canvas { width: 46px; height: 34px; object-fit: contain; border-radius: 3px; background: repeating-conic-gradient(#3a3e46 0 25%, #2a2d33 0 50%) 0 0 / 8px 8px; }
 .layer .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .layer .meta { font-size: 11px; color: var(--muted); font-family: var(--font-mono); }
@@ -203,6 +207,8 @@ body.mode-video .vpanel { grid-area: panel; display: flex; }
 .vclip.sel { border: 2px solid var(--accent); }
 .vov { position: absolute; height: 13px; border: 0; border-radius: 3px; background: #6a5acd; color: #fff; font-size: 9.5px; line-height: 13px; padding: 0 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; }
 .vov.anim { background: #2f8f83; }
+.vov.media { background: #c2410c; }
+.vov .kfd { position: absolute; top: 3px; width: 7px; height: 7px; margin-left: -3px; background: #fff; transform: rotate(45deg); border: 1px solid #000; pointer-events: none; }
 .vov.sel { outline: 2px solid var(--accent); }
 .ovempty { position: absolute; left: 8px; top: 6px; font-size: 11px; color: var(--muted); }
 .playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); pointer-events: none; box-shadow: 0 0 0 1px rgba(0,0,0,.4); }
@@ -457,6 +463,8 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
         <div class="line"><span>Name</span><input type="text" id="lyName"></div>
         <div class="line"><span>Opacity</span><input type="range" id="lyOpacity" min="0" max="100"><output id="lyOpacityV" class="docinfo"></output></div>
         <div class="line"><span>Blend</span><select id="lyBlend"></select></div>
+        <div class="line"><span>Mask</span><div class="btnrow"><button class="btn sm" id="mkAdd">Add mask</button><button class="btn sm" id="mkSel">From selection</button><button class="btn sm" id="mkToggle" hidden>Turn mask off</button><button class="btn sm" id="mkApply" hidden>Apply</button><button class="btn sm danger" id="mkDel" hidden>Delete</button></div></div>
+        <p class="hint" id="mkInfo"></p>
         <div class="btnrow">
           <button class="btn sm" id="lyUp">Move up</button>
           <button class="btn sm" id="lyDown">Move down</button>
@@ -609,8 +617,22 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
           <label class="check"><input type="checkbox" id="vOvFull"> Whole video</label>
           <div class="field2"><label for="vOvStart">From (s)</label><input id="vOvStart" type="number" step="0.1" min="0"></div>
           <div class="field2"><label for="vOvEnd">To (s)</label><input id="vOvEnd" type="number" step="0.1" min="0"></div>
+          <div class="label">Position &amp; animation</div>
+          <div class="field2"><label for="vTfX">Left / right</label><input type="range" id="vTfX" min="-60" max="60" value="0"><output id="vTfXV" class="docinfo"></output></div>
+          <div class="field2"><label for="vTfY">Up / down</label><input type="range" id="vTfY" min="-60" max="60" value="0"><output id="vTfYV" class="docinfo"></output></div>
+          <div class="field2"><label for="vTfS">Size</label><input type="range" id="vTfS" min="10" max="300" value="100"><output id="vTfSV" class="docinfo"></output></div>
+          <div class="field2"><label for="vTfO">Opacity</label><input type="range" id="vTfO" min="0" max="100" value="100"><output id="vTfOV" class="docinfo"></output></div>
+          <div class="btnrow"><button class="btn sm" id="vKfAdd">◆ Add keyframe here</button><button class="btn sm" id="vKfDel">Delete keyframe</button><button class="btn sm" id="vKfClear">Clear animation</button></div>
+          <p class="hint" id="vKfInfo"></p>
+          <div class="btnrow"><button class="chip" data-anim="fly">Fly in</button><button class="chip" data-anim="pop">Pop</button><button class="chip" data-anim="slide">Slide across</button><button class="chip" data-anim="push">Slow push</button><button class="chip" data-anim="fade">Fade</button></div>
           <button class="btn sm danger" id="vOvDel">Remove</button>
         </div>
+      </section>
+      <section class="vsec">
+        <div class="label">Video &amp; photos on top</div>
+        <button class="btn sm" id="vPipAdd">Add video or photo on top</button>
+        <input type="file" id="vPipFile" accept="video/*,image/*,.mp4,.mov,.webm" hidden>
+        <p class="hint">Picture-in-picture, logos or reaction videos on a second track. Select it on the timeline to place, size and animate it. Its sound is muted.</p>
       </section>
       <section class="vsec">
         <div class="label">Sound</div>
@@ -630,12 +652,13 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
 
     <div class="tabpane" id="vpane-export" hidden>
       <div class="field2"><label for="vRes">Quality</label><select id="vRes"><option value="480">480p (small file)</option><option value="720" selected>720p HD</option><option value="1080">1080p Full HD</option></select></div>
+      <div class="field2"><label for="vExpMode">Method</label><select id="vExpMode"><option value="exact">Frame by frame (exact)</option><option value="live">Real time (records playback)</option></select></div>
       <p class="hint" id="vExpInfo"></p>
       <button class="btn primary" id="vExport">Export video</button>
       <button class="btn" id="vCancel" hidden>Cancel export</button>
       <div id="vExporting" hidden><div class="pbar"><div id="vExpBar"></div></div><p class="hint" id="vExpPct"></p></div>
       <p id="vExpResult" class="vresult"></p>
-      <p class="hint">Exporting plays your video through once and records it on your device. Nothing is uploaded.</p>
+      <p class="hint">Exporting happens on your device. Nothing is uploaded.</p>
     </div>
   </aside>
 </div>
@@ -696,9 +719,9 @@ function addLayer(layer, select = true) {
 
 /* ---------- Undo ---------- */
 const undoStack = [], redoStack = [];
-function snap() { return { w: S.w, h: S.h, active: S.active, adj: { ...S.adj }, tone: Tone.cloneTone(S.tone), sel: S.sel ? clone(S.sel) : null, layers: S.layers.map(l => ({ ...l, canvas: clone(l.canvas) })) }; }
+function snap() { return { w: S.w, h: S.h, active: S.active, adj: { ...S.adj }, tone: Tone.cloneTone(S.tone), sel: S.sel ? clone(S.sel) : null, layers: S.layers.map(l => ({ ...l, canvas: clone(l.canvas), mask: l.mask ? clone(l.mask) : null })), maskEdit: S.maskEdit }; }
 function pushUndo() { undoStack.push(snap()); if (undoStack.length > 30) undoStack.shift(); redoStack.length = 0; updUndo(); }
-function restore(s) { S.w = s.w; S.h = s.h; S.layers = s.layers; S.active = s.active; S.adj = s.adj; S.tone = s.tone || Tone.defaultTone(); S.sel = s.sel || null; sizeDoc(); syncAdj(); renderLayers(); render(); hooks.changed.forEach(f => f()); }
+function restore(s) { S.w = s.w; S.h = s.h; S.layers = s.layers; S.active = s.active; S.adj = s.adj; S.tone = s.tone || Tone.defaultTone(); S.sel = s.sel || null; S.maskEdit = !!s.maskEdit; sizeDoc(); syncAdj(); renderLayers(); render(); hooks.changed.forEach(f => f()); }
 function doUndo() { if (!undoStack.length) return; redoStack.push(snap()); restore(undoStack.pop()); updUndo(); }
 function doRedo() { if (!redoStack.length) return; undoStack.push(snap()); restore(redoStack.pop()); updUndo(); }
 function updUndo() { $("#btnUndo").disabled = !undoStack.length; $("#btnRedo").disabled = !redoStack.length; }
@@ -714,7 +737,7 @@ function doRender() {
   for (const l of S.layers) {
     if (!l.visible || l.opacity <= 0) continue;
     let src = l.canvas;
-    if (stroke && stroke.layer === l) src = strokePreview(l);
+    src = layerSrc(l);
     cctx.globalAlpha = l.opacity; cctx.globalCompositeOperation = l.blend;
     cctx.drawImage(src, l.x, l.y);
   }
@@ -812,7 +835,11 @@ function newDocument(w, h, baseCanvas, name) {
   S.layers.push(base); S.active = base.id;
   sizeDoc(); zoomFit(); syncAdj(); renderLayers(); render(); clearCrop();
 }
-function bakeLayer(l, w, h, fn) { const n = mk(w, h), x = n.getContext("2d"); fn(x, l); l.canvas = n; l.x = 0; l.y = 0; }
+function bakeLayer(l, w, h, fn) {
+  const n = mk(w, h), x = n.getContext("2d"); fn(x, l);
+  if (l.mask) { const real = l.canvas; l.canvas = l.mask; const nm = mk(w, h); fn(nm.getContext("2d"), l); l.mask = nm; l.canvas = real; }
+  l.canvas = n; l.x = 0; l.y = 0;
+}
 function cropDoc(x, y, w, h) {
   x = Math.round(Math.max(0, x)); y = Math.round(Math.max(0, y));
   w = Math.round(Math.min(w, S.w - x)); h = Math.round(Math.min(h, S.h - y));
@@ -879,18 +906,33 @@ function renderLayers() {
     const eye = document.createElement("button"); eye.className = "eye"; eye.innerHTML = l.visible ? eyeOn : eyeOff; eye.setAttribute("aria-label", l.visible ? "Hide layer" : "Show layer");
     eye.onclick = (e) => { e.stopPropagation(); pushUndo(); l.visible = !l.visible; renderLayers(); render(); };
     const th = mk(92, 68), tx = th.getContext("2d"); const sc = Math.min(92 / S.w, 68 / S.h);
-    tx.drawImage(l.canvas, (92 - S.w * sc) / 2 + l.x * sc, (68 - S.h * sc) / 2 + l.y * sc, l.canvas.width * sc, l.canvas.height * sc);
+    tx.drawImage(maskedCopy(l), (92 - S.w * sc) / 2 + l.x * sc, (68 - S.h * sc) / 2 + l.y * sc, l.canvas.width * sc, l.canvas.height * sc);
+    th.className = "lthumb" + (l.id === S.active && !S.maskEdit ? " target" : "");
+    th.title = "Layer pixels"; th.onclick = (e) => { if (l.id === S.active && S.maskEdit) { e.stopPropagation(); mask.edit(false); } };
+    let mth = null;
+    if (l.mask) {
+      mth = mk(92, 68); const mx = mth.getContext("2d"); mx.fillStyle = "#000"; mx.fillRect(0, 0, 92, 68);
+      const mm = clone(l.mask), mmx = mm.getContext("2d"); mmx.globalCompositeOperation = "source-in"; mmx.fillStyle = "#fff"; mmx.fillRect(0, 0, mm.width, mm.height);
+      mx.drawImage(mm, (92 - S.w * sc) / 2 + l.x * sc, (68 - S.h * sc) / 2 + l.y * sc, l.canvas.width * sc, l.canvas.height * sc);
+      mth.className = "lthumb mthumb" + (l.id === S.active && S.maskEdit ? " target" : "") + (l.maskOn === false ? " off" : "");
+      mth.title = "Layer mask: click to paint on it"; mth.onclick = (e) => { e.stopPropagation(); S.active = l.id; mask.edit(true); };
+    }
     const nm = document.createElement("div"); nm.style.minWidth = "0";
     nm.innerHTML = `<div class="name"></div><div class="meta">${Math.round(l.opacity * 100)}% · ${(BLENDS.find(b => b[0] === l.blend) || ["", "Normal"])[1]}</div>`;
     nm.firstChild.textContent = l.name;
-    row.append(eye, th, nm);
-    row.onclick = () => { S.active = l.id; renderLayers(); };
+    const thumbs = document.createElement("div"); thumbs.className = "thumbs"; thumbs.append(th); if (mth) thumbs.append(mth);
+    row.append(eye, thumbs, nm);
+    row.onclick = () => { if (S.active !== l.id) S.maskEdit = false; S.active = l.id; renderLayers(); };
     list.append(row);
   }
   const a = activeLayer();
   $("#layerCtl").hidden = !a;
   if (a) { $("#lyName").value = a.name; $("#lyOpacity").value = Math.round(a.opacity * 100); $("#lyOpacityV").textContent = Math.round(a.opacity * 100) + "%"; $("#lyBlend").value = a.blend; }
   $("#lyMerge").disabled = !a || S.layers.indexOf(a) === 0;
+  const hasMask = !!(a && a.mask);
+  $("#mkAdd").hidden = hasMask; $("#mkSel").hidden = hasMask; $("#mkToggle").hidden = $("#mkApply").hidden = $("#mkDel").hidden = !hasMask;
+  if (hasMask) $("#mkToggle").textContent = a.maskOn === false ? "Turn mask on" : "Turn mask off";
+  $("#mkInfo").textContent = hasMask ? (S.maskEdit ? "Painting on the mask: brush hides, eraser reveals." : "Click the mask thumbnail to paint on it.") : "Hide parts of this layer without erasing them.";
 }
 let lyOpUndo = 0;
 $("#lyName").addEventListener("change", (e) => { const a = activeLayer(); if (a) { pushUndo(); a.name = e.target.value || a.name; renderLayers(); } });
@@ -898,18 +940,19 @@ $("#lyOpacity").addEventListener("input", (e) => { const a = activeLayer(); if (
 $("#lyOpacity").addEventListener("change", renderLayers);
 $("#lyBlend").addEventListener("change", (e) => { const a = activeLayer(); if (a) { pushUndo(); a.blend = e.target.value; renderLayers(); render(); } });
 $("#lyNew").onclick = () => { pushUndo(); addLayer(makeLayer("Layer " + (S.layers.length + 1))); };
-$("#lyDup").onclick = () => { const a = activeLayer(); if (!a) return; pushUndo(); addLayer({ ...a, id: uid++, name: a.name + " copy", canvas: clone(a.canvas) }); };
+$("#lyDup").onclick = () => { const a = activeLayer(); if (!a) return; pushUndo(); addLayer({ ...a, id: uid++, name: a.name + " copy", canvas: clone(a.canvas), mask: a.mask ? clone(a.mask) : null }); };
 $("#lyDel").onclick = () => { const a = activeLayer(); if (!a) return; pushUndo(); const i = S.layers.indexOf(a); S.layers.splice(i, 1); S.active = (S.layers[Math.max(0, i - 1)] || {}).id ?? null; renderLayers(); render(); };
 const moveLayer = (dir) => { const a = activeLayer(); if (!a) return; const i = S.layers.indexOf(a), j = i + dir; if (j < 0 || j >= S.layers.length) return; pushUndo(); [S.layers[i], S.layers[j]] = [S.layers[j], S.layers[i]]; renderLayers(); render(); };
 $("#lyUp").onclick = () => moveLayer(1); $("#lyDown").onclick = () => moveLayer(-1);
 $("#lyMerge").onclick = () => {
   const a = activeLayer(); if (!a) return; const i = S.layers.indexOf(a); if (i < 1) return; pushUndo();
-  const below = S.layers[i - 1];
-  bakeLayer(below, S.w, S.h, (c) => { c.globalAlpha = below.opacity; c.drawImage(below.canvas, below.x, below.y); c.globalAlpha = a.visible ? a.opacity : 0; c.globalCompositeOperation = a.blend; c.drawImage(a.canvas, a.x, a.y); });
+  const below = S.layers[i - 1], srcB = maskedCopy(below), srcA = maskedCopy(a); below.mask = null; S.maskEdit = false;
+  bakeLayer(below, S.w, S.h, (c) => { c.globalAlpha = below.opacity; c.drawImage(srcB, below.x, below.y); c.globalAlpha = a.visible ? a.opacity : 0; c.globalCompositeOperation = a.blend; c.drawImage(srcA, a.x, a.y); });
   below.opacity = 1; S.layers.splice(i, 1); S.active = below.id; renderLayers(); render();
 };
 $("#lyFill").onclick = () => { const a = activeLayer(); if (!a) return; pushUndo(); const c = a.canvas.getContext("2d"); c.fillStyle = $("#color").value; c.fillRect(0, 0, a.canvas.width, a.canvas.height); renderLayers(); render(); };
 $("#lyClear").onclick = () => { const a = activeLayer(); if (!a) return; pushUndo(); a.canvas.getContext("2d").clearRect(0, 0, a.canvas.width, a.canvas.height); renderLayers(); render(); };
+$("#mkAdd").onclick = () => mask.add(false); $("#mkSel").onclick = () => mask.add(true); $("#mkToggle").onclick = () => mask.toggle(); $("#mkApply").onclick = () => mask.apply(); $("#mkDel").onclick = () => mask.remove();
 $("#lyPlace").onclick = () => $("#placeIn").click();
 $("#placeIn").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) loadImage(f, true); };
 
@@ -978,7 +1021,7 @@ function drawStrokeBuffer() {
   x.clearRect(0, 0, c.width, c.height);
   const size = +$("#optSize").value, soft = +$("#optSoft").value / 100;
   x.filter = soft > 0 ? `blur(${(size * soft * 0.35).toFixed(1)}px)` : "none";
-  x.strokeStyle = x.fillStyle = stroke.eraser ? "#000" : $("#color").value;
+  x.strokeStyle = x.fillStyle = stroke.eraser || stroke.mask ? "#fff" : $("#color").value;
   x.lineCap = "round"; x.lineJoin = "round"; x.lineWidth = size * (1 - soft * 0.4);
   const pts = stroke.pts.map(p => ({ x: p.x - l.x, y: p.y - l.y }));
   if (pts.length === 1) { x.beginPath(); x.arc(pts[0].x, pts[0].y, x.lineWidth / 2, 0, 7); x.fill(); }
@@ -990,9 +1033,39 @@ function drawStrokeBuffer() {
 }
 function applyStroke(ctx) {
   ctx.save(); ctx.globalAlpha = +$("#optOpacity").value / 100;
-  ctx.globalCompositeOperation = stroke.eraser ? "destination-out" : "source-over";
+  ctx.globalCompositeOperation = stroke.mask ? (stroke.eraser ? "source-over" : "destination-out") : stroke.eraser ? "destination-out" : "source-over";
   ctx.drawImage(stroke.buf, 0, 0); ctx.restore();
 }
+/* ---------- Layer masks: alpha of l.mask = how visible each pixel is ---------- */
+const maskTmp = document.createElement("canvas"), mtctx = maskTmp.getContext("2d");
+const maskStroke = document.createElement("canvas"), msctx = maskStroke.getContext("2d");
+function fitCanvas(c, w, h) { if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } }
+function layerSrc(l) {
+  let src = l.canvas;
+  if (stroke && stroke.layer === l && !stroke.mask) src = strokePreview(l);
+  if (!l.mask || l.maskOn === false) return src;
+  let m = l.mask;
+  if (stroke && stroke.layer === l && stroke.mask) { fitCanvas(maskStroke, m.width, m.height); msctx.clearRect(0, 0, m.width, m.height); msctx.drawImage(m, 0, 0); applyStroke(msctx); m = maskStroke; }
+  fitCanvas(maskTmp, src.width, src.height); mtctx.globalCompositeOperation = "source-over"; mtctx.clearRect(0, 0, src.width, src.height);
+  mtctx.drawImage(src, 0, 0); mtctx.globalCompositeOperation = "destination-in"; mtctx.drawImage(m, 0, 0); mtctx.globalCompositeOperation = "source-over";
+  return maskTmp;
+}
+function maskedCopy(l) { if (!l.mask || l.maskOn === false) return l.canvas; const c = clone(l.canvas), x = c.getContext("2d"); x.globalCompositeOperation = "destination-in"; x.drawImage(l.mask, 0, 0); return c; }
+function fullMask(l) { const m = mk(l.canvas.width, l.canvas.height), x = m.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, m.width, m.height); return m; }
+const mask = {
+  add(fromSel) {
+    const a = activeLayer(); if (!a) return toast("Pick a layer first");
+    if (fromSel && !S.sel) return toast("Make a selection first");
+    pushUndo(); const m = mk(a.canvas.width, a.canvas.height), x = m.getContext("2d");
+    if (fromSel) x.drawImage(S.sel, -a.x, -a.y); else { x.fillStyle = "#fff"; x.fillRect(0, 0, m.width, m.height); }
+    a.mask = m; a.maskOn = true; S.maskEdit = true; renderLayers(); render();
+    toast(fromSel ? "Added a mask from the selection: everything outside it is hidden" : "Added a mask. Brush hides, eraser brings it back");
+  },
+  apply() { const a = activeLayer(); if (!a || !a.mask) return; pushUndo(); a.canvas = maskedCopy({ ...a, maskOn: true }); a.mask = null; S.maskEdit = false; renderLayers(); render(); toast("Applied the mask to the layer"); },
+  remove() { const a = activeLayer(); if (!a || !a.mask) return; pushUndo(); a.mask = null; S.maskEdit = false; renderLayers(); render(); toast("Deleted the mask"); },
+  toggle() { const a = activeLayer(); if (!a || !a.mask) return; pushUndo(); a.maskOn = a.maskOn === false; renderLayers(); render(); },
+  edit(on) { const a = activeLayer(); S.maskEdit = !!(on && a && a.mask); renderLayers(); if (S.maskEdit) toast("Painting on the mask: brush hides, eraser reveals"); },
+};
 function strokePreview(l) {
   if (strokeTmp.width !== l.canvas.width || strokeTmp.height !== l.canvas.height) { strokeTmp.width = l.canvas.width; strokeTmp.height = l.canvas.height; }
   stctx.clearRect(0, 0, strokeTmp.width, strokeTmp.height); stctx.drawImage(l.canvas, 0, 0); applyStroke(stctx); return strokeTmp;
@@ -1008,7 +1081,7 @@ view.addEventListener("pointerdown", (e) => {
     if (!a) return toast("Add a layer first");
     if (!a.visible) return toast("The active layer is hidden");
     pushUndo();
-    stroke = { layer: a, pts: [p], eraser: t === "eraser", buf: mk(a.canvas.width, a.canvas.height) };
+    stroke = { layer: a, pts: [p], eraser: t === "eraser", mask: !!(S.maskEdit && a.mask), buf: mk(a.canvas.width, a.canvas.height) };
     drawStrokeBuffer(); render();
   } else if (t === "move") {
     if (!a) return; pushUndo(); drag = { kind: "move", sx: p.x, sy: p.y, lx: a.x, ly: a.y, layer: a };
@@ -1040,7 +1113,7 @@ view.addEventListener("pointermove", (e) => {
 });
 const endPointer = (e) => {
   if (extDrag) { extDrag = false; if (EXT[S.tool] && EXT[S.tool].up) EXT[S.tool].up(e && e.clientX != null ? toDoc(e) : null, e); return; }
-  if (stroke) { const l = stroke.layer; applyStroke(l.canvas.getContext("2d")); stroke = null; renderLayers(); render(); }
+  if (stroke) { const l = stroke.layer; applyStroke((stroke.mask && l.mask ? l.mask : l.canvas).getContext("2d")); stroke = null; renderLayers(); render(); }
   if (drag?.kind === "move") renderLayers();
   if (drag?.kind === "pan") view.style.cursor = "grab";
   drag = null;
@@ -1307,7 +1380,7 @@ function initAI() {
 
 /* ---------- Shared with video mode ---------- */
 window.FE = { DEF, RANGE, GROUPS, PRESETS, fmtAdj, FONTS, toast, BLENDS,
-  S, EXT, hooks, mk, clone, view, comp, dropUndo: () => { undoStack.pop(); updUndo(); }, pushUndo, render, doRender, renderLayers, syncAdj, activeLayer, makeLayer, addLayer, setTool, toDoc, drawTextOp,
+  S, EXT, hooks, mk, clone, view, comp, mask, maskedCopy, dropUndo: () => { undoStack.pop(); updUndo(); }, pushUndo, render, doRender, renderLayers, syncAdj, activeLayer, makeLayer, addLayer, setTool, toDoc, drawTextOp,
   cropDoc, rotateDoc, flipDoc, newDocument, sizeDoc, zoomFit, setZoom, loadImage, doUndo, doRedo, sampleScene,
   color: () => $("#color").value, setColor: (v) => { $("#color").value = v; swatchSync(); }, optSize: () => +$("#optSize").value, optOpacity: () => +$("#optOpacity").value / 100, optSoft: () => +$("#optSoft").value / 100,
   getAdj: () => ({ ...S.adj }),
@@ -1329,6 +1402,7 @@ setTool("brush");
 })();
 </script>
 <script src="photo-pro.js"></script>
+<script src="vendor/mp4-muxer.js"></script>
 <script src="video.js"></script>
 <script src="deluxe-link.js"></script>
 </body>

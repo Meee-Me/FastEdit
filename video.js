@@ -182,20 +182,24 @@
     try { m.node = AC.createMediaElementSource(m.el); m.gain = AC.createGain(); m.gain.connect(monitor); m.gain.connect(recDest); rebuildChain(m); } catch {}
   }
   // source -> [low cut] -> [hum notches] -> [voice EQ] -> [bass] -> [compressor + level gain] -> volume
-  function rebuildChain(m) {
-    if (!m.node || !AC) return;
-    try { m.node.disconnect(); } catch {}
-    for (const n of m.fx || []) { try { n.disconnect(); } catch {} }
+  function buildFx(ctx, m) {
     const fx = [], f = V.sfx, a = m.audio && !m.audio.none ? m.audio : null;
-    const biquad = (type, freq, q, gain) => { const n = AC.createBiquadFilter(); n.type = type; n.frequency.value = freq; if (q != null) n.Q.value = q; if (gain != null) n.gain.value = gain; return n; };
+    const biquad = (type, freq, q, gain) => { const n = ctx.createBiquadFilter(); n.type = type; n.frequency.value = freq; if (q != null) n.Q.value = q; if (gain != null) n.gain.value = gain; return n; };
     if (f.hum || f.voice) fx.push(biquad("highpass", f.hum ? 85 : 70, 0.7));
     if (f.hum) for (const hz of a && a.hum ? [a.hum, a.hum * 2, a.hum * 3] : [50, 60, 100, 120]) fx.push(biquad("notch", hz, 30));
     if (f.voice) { fx.push(biquad("lowshelf", 200, null, -3)); fx.push(biquad("peaking", 3000, 0.9, 5)); }
     if (f.bass) fx.push(biquad("lowshelf", 120, null, 7));
     if (f.level) {
-      const c = AC.createDynamicsCompressor(); c.threshold.value = -26; c.knee.value = 12; c.ratio.value = 4; c.attack.value = 0.005; c.release.value = 0.25; fx.push(c);
-      const g = AC.createGain(); g.gain.value = a ? a.norm : 1.5; fx.push(g);
+      const c = ctx.createDynamicsCompressor(); c.threshold.value = -26; c.knee.value = 12; c.ratio.value = 4; c.attack.value = 0.005; c.release.value = 0.25; fx.push(c);
+      const g = ctx.createGain(); g.gain.value = a ? a.norm : 1.5; fx.push(g);
     }
+    return fx;
+  }
+  function rebuildChain(m) {
+    if (!m.node || !AC) return;
+    try { m.node.disconnect(); } catch {}
+    for (const n of m.fx || []) { try { n.disconnect(); } catch {} }
+    const fx = buildFx(AC, m);
     let prev = m.node; for (const n of fx) { prev.connect(n); prev = n; } prev.connect(m.gain);
     m.fx = fx;
   }
@@ -347,10 +351,24 @@
     V.overlays.push(ov);
     return msg;
   }
+  /* keyframes: position (x, y as a fraction of the frame from centre), scale and opacity over the overlay's own time */
+  const BASE_TF = { x: 0, y: 0, s: 1, o: 1 };
+  const easeIO = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+  function tfAt(ov, lt) {
+    const kf = ov.kf || [], base = ov.tf || BASE_TF;
+    if (!kf.length) return base;
+    if (lt <= kf[0].t) return kf[0]; if (lt >= kf[kf.length - 1].t) return kf[kf.length - 1];
+    let i = 1; while (kf[i].t < lt) i++;
+    const a = kf[i - 1], b = kf[i], k = easeIO((lt - a.t) / Math.max(1e-6, b.t - a.t));
+    return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, s: a.s + (b.s - a.s) * k, o: a.o + (b.o - a.o) * k };
+  }
   function drawOverlay(c, W, H, ov, lt) {
-    const len = (ov.full ? total() : ov.end) - ov.start, edge = ov.full ? 1 : clamp(Math.min(lt, len - lt) / 0.3, 0, 1);
+    const len = (ov.full ? total() : ov.end) - ov.start, T = tfAt(ov, lt);
+    const edge = (ov.full || (ov.kf && ov.kf.length) ? 1 : clamp(Math.min(lt, len - lt) / 0.3, 0, 1)) * clamp(T.o, 0, 1);
     c.save(); c.globalAlpha = edge;
-    if (ov.type === "anim") { c.globalCompositeOperation = ANIM[ov.kind].blend; ANIM[ov.kind].draw(c, W, H, lt, ov); }
+    if (T.x || T.y || T.s !== 1) { c.translate(W / 2 + T.x * W, H / 2 + T.y * H); c.scale(T.s, T.s); c.translate(-W / 2, -H / 2); }
+    if (ov.type === "media") drawMediaOverlay(c, W, H, ov, lt);
+    else if (ov.type === "anim") { c.globalCompositeOperation = ANIM[ov.kind].blend; ANIM[ov.kind].draw(c, W, H, lt, ov); }
     else {
       const key = W + "x" + H; let r = ov.caches[key];
       if (!r) { r = AI.renderJob(ov.job, ov.A, mk(W, H), { fonts: FE.FONTS }); ov.caches = { ...ov.caches, [key]: r }; }
@@ -358,6 +376,44 @@
     }
     c.restore();
   }
+  /* ---------- second track: videos and photos on top ---------- */
+  function auxVideo(m, role) { // a separate player for the same file, so it can run alongside the main clip
+    const key = "_aux_" + role; if (!m[key]) { const el = document.createElement("video"); el.muted = true; el.playsInline = true; el.preload = "auto"; el.src = m.url; m[key] = el; } return m[key];
+  }
+  function mediaOverlaySource(ov) { const m = V.media.find((x) => x.id === ov.mediaId); if (!m) return null; return { m, el: m.kind === "video" ? auxVideo(m, "ov" + ov.id) : m.el }; }
+  function drawMediaOverlay(c, W, H, ov) {
+    const src = mediaOverlaySource(ov); if (!src) return; const { m, el } = src;
+    if (m.kind === "video" && el.readyState < 2) return;
+    const sc = Math.min(W / m.w, H / m.h), w = m.w * sc, h = m.h * sc, x = (W - w) / 2, y = (H - h) / 2, r = Math.min(w, h) * 0.04;
+    c.shadowColor = "rgba(0,0,0,.45)"; c.shadowBlur = Math.min(W, H) * 0.04;
+    c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); c.fillStyle = "#000"; c.fill(); c.shadowBlur = 0;
+    c.save(); c.clip(); try { c.drawImage(el, x, y, w, h); } catch {} c.restore();
+  }
+
+  function auxAt(t) {
+    const out = [];
+    for (const ov of V.overlays) {
+      if (ov.type !== "media") continue; const src = mediaOverlaySource(ov); if (!src || src.m.kind !== "video") continue;
+      const e = ov.full ? total() : ov.end; if (t >= ov.start && t <= e) out.push({ el: src.el, lt: clamp((ov.srcIn || 0) + (t - ov.start), 0, src.m.duration - 0.05) });
+    }
+    const at = clipAt(t);
+    if (at && at.index > 0) {
+      const tr = V.trans[at.clip.id], tin = t - at.start;
+      if (tr && needsSnap(tr.type) && tin < tr.dur) { const prev = V.clips[at.index - 1], pm = mediaOf(prev), lt = prev.out + tin * prev.speed; if (pm.kind === "video" && lt < pm.duration - 0.05) out.push({ el: auxVideo(pm, "tail"), lt, rate: prev.speed }); }
+    }
+    return out;
+  }
+  const allAux = () => { const els = []; for (const m of V.media) for (const k in m) if (k.startsWith("_aux_")) els.push(m[k]); return els; };
+  function syncAux(t, playing) {
+    const want = auxAt(t), live = new Set(want.map((a) => a.el));
+    for (const el of allAux()) if (!live.has(el) && !el.paused) el.pause();
+    for (const a of want) {
+      a.el.playbackRate = a.rate || 1;
+      if (playing) { if (a.el.paused) { a.el.currentTime = a.lt; a.el.play().catch(() => {}); } else if (Math.abs(a.el.currentTime - a.lt) > 0.25) a.el.currentTime = a.lt; }
+      else if (!a.el.paused) a.el.pause();
+    }
+  }
+  async function seekAux(t) { const want = auxAt(t); for (const el of allAux()) if (!el.paused) el.pause(); await Promise.all(want.map(async (a) => { if (a.el.readyState < 1) await new Promise((r) => { a.el.addEventListener("loadedmetadata", r, { once: true }); setTimeout(r, 3000); }); await seekEl(a.el, a.lt); if (a.el.readyState < 2) await new Promise((r) => { a.el.addEventListener("loadeddata", r, { once: true }); setTimeout(r, 1500); }); })); }
 
   /* ================= frame rendering ================= */
   function trackAt(m, lt) {
@@ -399,6 +455,8 @@
       }
     } finally { snapBusy = false; }
   }
+  const outCv = document.createElement("canvas"), outCtx = outCv.getContext("2d");
+  function outgoingFrame(W, H, clip, m, src, lt) { if (outCv.width !== W || outCv.height !== H) { outCv.width = W; outCv.height = H; } outCtx.fillStyle = "#000"; outCtx.fillRect(0, 0, W, H); drawSrc(outCtx, W, H, clip, m, src, lt); return outCv; }
   function colorLUTs() {
     const key = JSON.stringify([V.wheels, V.tone]);
     if (colorLUTs.key === key) return colorLUTs.val;
@@ -421,7 +479,12 @@
     if (tr && tin < tr.dur) {
       const pIn = clamp(tin / tr.dur, 0, 1);
       if (needsSnap(tr.type)) {
-        const snap = snaps.get(snapKey(V.clips[index - 1], W, H));
+        const prev = V.clips[index - 1], pm = mediaOf(prev), tailLt = prev.out + tin * prev.speed;
+        let snap = null;
+        if (pm.kind === "synthetic" && tailLt < pm.duration) { pm.draw(pm.ctx, tailLt); snap = outgoingFrame(W, H, prev, pm, pm.canvas, tailLt); }
+        else if (pm.kind === "image") snap = outgoingFrame(W, H, prev, pm, pm.el, Math.min(prev.out, tailLt));
+        else if (pm.kind === "video" && tailLt < pm.duration - 0.05) { const el = auxVideo(pm, "tail"); if (el.readyState >= 2 && Math.abs(el.currentTime - tailLt) < 0.4) snap = outgoingFrame(W, H, prev, pm, el, tailLt); }
+        if (!snap) snap = snaps.get(snapKey(prev, W, H));
         if (!snap) { ensureSnaps(W, H).then(() => { if (!P.playing) redrawSoon(); }); dip = 1 - pIn; }
         else if (tr.type === "cross") { c.globalAlpha = 1 - pIn; c.drawImage(snap, 0, 0, W, H); c.globalAlpha = 1; }
         else if (tr.type === "wipe") { c.save(); c.beginPath(); c.rect(pIn * W, 0, W, H); c.clip(); c.drawImage(snap, 0, 0, W, H); c.restore(); c.fillStyle = "rgba(255,255,255,.6)"; c.fillRect(pIn * W - 1, 0, 2, H); }
@@ -453,6 +516,7 @@
     const my = ++seekToken; P.t = clamp(t, 0, total());
     const at = clipAt(P.t);
     if (at) { const m = mediaOf(at.clip); if (m.kind === "video") { if (!m.el.paused) m.el.pause(); await seekEl(m.el, at.clip.in + (P.t - at.start) * at.clip.speed); } }
+    await seekAux(P.t);
     if (my !== seekToken) return;
     if (!P.playing) syncMusic(P.t, false);
     draw(); updateTime();
@@ -472,7 +536,7 @@
     await startClipAt(P.t);
     P.raf = requestAnimationFrame(loop);
   }
-  function pause() { P.playing = false; cancelAnimationFrame(P.raf); for (const m of V.media) if (m.el && m.el.pause && !m.el.paused) m.el.pause(); setPlayBtn(); }
+  function pause() { P.playing = false; cancelAnimationFrame(P.raf); for (const m of V.media) if (m.el && m.el.pause && !m.el.paused) m.el.pause(); for (const el of allAux()) if (!el.paused) el.pause(); setPlayBtn(); }
   function loop(ts) {
     if (!P.playing) return;
     const clip = P.clip, m = mediaOf(clip), end = P.clipStart + clipLen(clip);
@@ -486,7 +550,7 @@
       startClipAt(end + 1e-4).then(() => { if (!P.playing) return; draw(); if (EXP?.rec?.state === "paused") EXP.rec.resume(); P.raf = requestAnimationFrame(loop); });
       return;
     }
-    P.t = Math.max(P.clipStart, t); syncMusic(P.t, true); draw(); updateTime(); followHead(); if (EXP) updateExportProgress();
+    P.t = Math.max(P.clipStart, t); syncMusic(P.t, true); syncAux(P.t, true); draw(); updateTime(); followHead(); if (EXP) updateExportProgress();
     P.raf = requestAnimationFrame(loop);
   }
   function setPlayBtn() { const b = $("#vPlay"); b.textContent = P.playing ? "Pause" : "Play"; b.setAttribute("aria-label", P.playing ? "Pause" : "Play"); }
@@ -614,7 +678,8 @@
       const e = o.full ? T : o.end, el = document.createElement("button");
       el.className = "vov" + (o.id === V.selOv ? " sel" : "") + (o.type === "anim" ? " anim" : ""); el.dataset.ov = o.id; el.type = "button";
       el.style.left = o.start * pps + "px"; el.style.width = Math.max(4, (e - o.start) * pps - 2) + "px"; el.style.top = (i % 2) * 13 + "px";
-      el.textContent = o.name; el.title = `${o.name} · ${fmt(o.start)}–${fmt(e)}`;
+      el.textContent = o.name; el.title = `${o.name} · ${fmt(o.start)}–${fmt(e)}`; if (o.type === "media") el.classList.add("media");
+      for (const k of o.kf || []) { const d = document.createElement("i"); d.className = "kfd"; d.style.left = k.t * pps + "px"; el.append(d); }
       oc.append(el);
     });
     const mu = $("#vMus"); mu.innerHTML = "";
@@ -641,6 +706,7 @@
     }
     const o = V.overlays.find((x) => x.id === V.selOv), ob = $("#vOvBox");
     ob.hidden = !o;
+    if (o) { syncTf(o); }
     if (o) { $("#vOvName").textContent = o.name; $("#vOvStart").value = o.start.toFixed(2); $("#vOvEnd").value = (o.full ? total() : o.end).toFixed(2); $("#vOvFull").checked = o.full; $("#vOvEnd").disabled = o.full; $("#vOvStart").disabled = o.full; }
     $("#vFollow").checked = V.follow; $("#vPosX").value = Math.round(V.frame.x * 100); $("#vPosY").value = Math.round(V.frame.y * 100);
     $("#vPosRow").hidden = V.follow;
@@ -792,6 +858,52 @@
     V.selOv = V.overlays[V.overlays.length - 1].id; refreshAll(); redrawSoon(); FE.toast(titleCase(msg || "Added"));
   };
   const selOv = () => V.overlays.find((x) => x.id === V.selOv);
+  const ovLocal = (o) => clamp(P.t - o.start, 0, (o.full ? total() : o.end) - o.start);
+  function syncTf(o) {
+    const T = tfAt(o, ovLocal(o)), kf = o.kf || [];
+    const set = (id, v, txt) => { if (document.activeElement !== $(id)) $(id).value = v; $(id + "V").textContent = txt; };
+    set("#vTfX", Math.round(T.x * 100), Math.round(T.x * 100) + "%"); set("#vTfY", Math.round(T.y * 100), Math.round(T.y * 100) + "%");
+    set("#vTfS", Math.round(T.s * 100), Math.round(T.s * 100) + "%"); set("#vTfO", Math.round(T.o * 100), Math.round(T.o * 100) + "%");
+    const here = kf.find((k) => Math.abs(k.t - ovLocal(o)) < 0.06);
+    $("#vKfInfo").textContent = kf.length ? `${kf.length} keyframe${kf.length > 1 ? "s" : ""} at ${kf.map((k) => k.t.toFixed(1) + " s").join(", ")}. Moving a slider sets a keyframe at the playhead.` : "No animation. Sliders set its position; add a keyframe to animate it.";
+    $("#vKfDel").disabled = !here; $("#vKfClear").disabled = !kf.length;
+  }
+  let tfUndo = 0;
+  function setTfFromSliders() {
+    const o = selOv(); if (!o) return;
+    if (Date.now() - tfUndo > 900) pushUndo(); tfUndo = Date.now();
+    const v = { x: $("#vTfX").value / 100, y: $("#vTfY").value / 100, s: $("#vTfS").value / 100, o: $("#vTfO").value / 100 };
+    if (o.kf && o.kf.length) { const t = ovLocal(o), i = o.kf.findIndex((k) => Math.abs(k.t - t) < 0.06); const k = { t: i >= 0 ? o.kf[i].t : t, ...v }; if (i >= 0) o.kf[i] = k; else { o.kf = [...o.kf, k].sort((a, b) => a.t - b.t); } }
+    else o.tf = v;
+    syncTf(o); renderTimeline(); redrawSoon();
+  }
+  for (const id of ["#vTfX", "#vTfY", "#vTfS", "#vTfO"]) $(id).addEventListener("input", setTfFromSliders);
+  $("#vKfAdd").onclick = () => { const o = selOv(); if (!o) return; pushUndo(); const t = ovLocal(o), T = tfAt(o, t); o.kf = [...(o.kf || []).filter((k) => Math.abs(k.t - t) >= 0.06), { t, x: T.x, y: T.y, s: T.s, o: T.o }].sort((a, b) => a.t - b.t); syncTf(o); renderTimeline(); FE.toast(`Keyframe at ${t.toFixed(1)} s. Move the playhead and change the sliders to animate.`); };
+  $("#vKfDel").onclick = () => { const o = selOv(); if (!o) return; pushUndo(); const t = ovLocal(o); o.kf = (o.kf || []).filter((k) => Math.abs(k.t - t) >= 0.06); syncTf(o); renderTimeline(); redrawSoon(); };
+  $("#vKfClear").onclick = () => { const o = selOv(); if (!o) return; pushUndo(); o.tf = tfAt(o, ovLocal(o)); o.kf = []; syncTf(o); renderTimeline(); redrawSoon(); };
+  function animPreset(o, style) {
+    const len = Math.max(0.5, (o.full ? total() : o.end) - o.start), base = o.tf || BASE_TF, d = Math.min(0.8, len / 3);
+    const k = (t, p) => ({ t: clamp(t, 0, len), x: base.x, y: base.y, s: base.s, o: 1, ...p });
+    if (style === "fly") o.kf = [k(0, { y: base.y + 0.35, o: 0 }), k(d, {}), k(len - d, {}), k(len, { y: base.y - 0.1, o: 0 })];
+    else if (style === "pop") o.kf = [k(0, { s: base.s * 0.4, o: 0 }), k(d * 0.6, { s: base.s * 1.08 }), k(d, {}), k(len - 0.3, {}), k(len, { s: base.s * 0.8, o: 0 })];
+    else if (style === "push") o.kf = [k(0, { s: base.s }), k(len, { s: base.s * 1.18 })];
+    else if (style === "slide") o.kf = [k(0, { x: base.x - 0.6, o: 0 }), k(d, {}), k(len - d, {}), k(len, { x: base.x + 0.6, o: 0 })];
+    else o.kf = [k(0, { o: 0 }), k(d, {}), k(len - d, {}), k(len, { o: 0 })];
+    if (o.full) { o.full = false; o.end = total(); }
+  }
+  $$("[data-anim]").forEach((b) => (b.onclick = () => { const o = selOv(); if (!o) return; pushUndo(); animPreset(o, b.dataset.anim); refreshAll(); redrawSoon(); FE.toast(`${b.textContent} animation added`); }));
+  $("#vPipAdd").onclick = () => $("#vPipFile").click();
+  $("#vPipFile").onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    busy(true, "Loading…");
+    try {
+      const m = f.type.startsWith("image/") ? await loadImageFile(f) : await loadVideoFile(f); V.media.push(m); pushUndo();
+      const T = total(), st = Math.min(P.t, Math.max(0, T - 0.5)), len = m.kind === "image" ? 4 : m.duration;
+      const ov = { id: uid++, type: "media", kind: "media", name: "On top: " + m.name, mediaId: m.id, srcIn: 0, start: st, end: Math.min(T, st + len), full: false, tf: { x: 0.28, y: 0.27, s: 0.36, o: 1 }, kf: [], caches: {}, job: { seed: 0 } };
+      V.overlays.push(ov); V.selOv = ov.id; await seekAux(P.t); FE.toast(`Added “${m.name}” on top. Use the sliders to place it`);
+    } catch (err) { FE.toast(err.message || "Couldn't add that file"); }
+    busy(false); refreshAll(); redrawSoon();
+  };
   $("#vOvStart").onchange = () => { const o = selOv(); if (!o) return; pushUndo(); o.start = clamp(+$("#vOvStart").value || 0, 0, o.end - 0.1); refreshAll(); redrawSoon(); };
   $("#vOvEnd").onchange = () => { const o = selOv(); if (!o) return; pushUndo(); o.end = clamp(+$("#vOvEnd").value || 0, o.start + 0.1, total()); refreshAll(); redrawSoon(); };
   $("#vOvFull").onchange = () => { const o = selOv(); if (!o) return; pushUndo(); o.full = $("#vOvFull").checked; if (o.full) o.start = 0; else o.end = total(); refreshAll(); redrawSoon(); };
@@ -831,15 +943,129 @@
     for (const t of ["video/mp4;codecs=avc1.42E01F,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"]) if (MediaRecorder.isTypeSupported(t)) return t;
     return null;
   }
+  const canExact = () => !!(window.VideoEncoder && window.VideoFrame && window.Mp4Muxer);
   function exportInfo() {
-    const mime = pickMime(), [W, H] = dims(+$("#vRes").value);
-    $("#vExpInfo").textContent = mime ? `${W} × ${H} · ${FPS} fps · ${mime.startsWith("video/mp4") ? "MP4" : "WebM"} · about ${fmt(total())} to export (it plays through in real time)` : "Video export isn't supported in this browser. Try a recent Chrome, Edge, Firefox or Safari on a computer.";
-    $("#vExport").disabled = !mime || !V.clips.length;
+    const mime = pickMime(), [W, H] = dims(+$("#vRes").value), exact = canExact() && $("#vExpMode").value === "exact";
+    $("#vExpMode").disabled = !canExact(); if (!canExact()) $("#vExpMode").value = "live";
+    $("#vExpInfo").textContent = exact ? `${W} × ${H} · ${FPS} fps · MP4 · rendered frame by frame, so every frame is exact and you can switch tabs while it works`
+      : mime ? `${W} × ${H} · ${FPS} fps · ${mime.startsWith("video/mp4") ? "MP4" : "WebM"} · plays through once in real time (about ${fmt(total())}); keep this tab visible`
+      : "Video export isn't supported in this browser. Try a recent Chrome, Edge, Firefox or Safari on a computer.";
+    $("#vExport").disabled = (!exact && !mime) || !V.clips.length;
+  }
+  $("#vExpMode").onchange = exportInfo;
+  let OFF = null;
+  async function decodedBuffer(m) {
+    if (m._buf !== undefined) return m._buf;
+    try { const ab = await (await fetch(m.url)).arrayBuffer(); m._buf = await new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 1, 48000).decodeAudioData(ab); }
+    catch { m._buf = null; }
+    return m._buf;
+  }
+  // Mixes every sound in the edit (clips at their speed with the sound effects, music with fades and ducking) into one track.
+  async function renderAudioMix(T) {
+    const sr = 48000, oc = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, Math.max(1, Math.ceil(T * sr)), sr);
+    let any = false;
+    if (!V.muted && V.volume > 0) {
+      const bus = oc.createGain(); bus.gain.value = V.volume; bus.connect(oc.destination);
+      if (Object.values(V.sfx).some(Boolean)) await analyzeAllAudio();
+      let st = 0;
+      for (const clip of V.clips) {
+        const m = mediaOf(clip), L = clipLen(clip);
+        if (m.kind === "video") {
+          const buf = await decodedBuffer(m);
+          if (buf && clip.in < buf.duration) {
+            const src = oc.createBufferSource(); src.buffer = buf; src.playbackRate.value = clip.speed;
+            const fx = buildFx(oc, m); let prev = src; for (const n of fx) { prev.connect(n); prev = n; } prev.connect(bus);
+            src.start(st, clip.in, Math.min(clip.out, buf.duration) - clip.in); any = true;
+          }
+        }
+        st += L;
+      }
+    }
+    const mm = musicMedia();
+    if (mm) {
+      const buf = await decodedBuffer(mm);
+      if (buf) {
+        if (V.music.duck) await analyzeAllAudio();
+        const src = oc.createBufferSource(), g = oc.createGain(); src.buffer = buf; src.connect(g); g.connect(oc.destination);
+        const a = V.music.start, b = Math.min(T, a + buf.duration);
+        for (let t = a; t <= b; t += 0.1) { let v = V.music.vol; if (T - t < 1.5) v *= clamp((T - t) / 1.5, 0, 1); if (V.music.duck && speechAt(t)) v *= 0.25; g.gain.linearRampToValueAtTime(v, t); }
+        src.start(a, 0, b - a); any = true;
+      }
+    }
+    return any ? await oc.startRendering() : null;
+  }
+  async function pickVideoCodec(W, H) {
+    for (const [codec, muxer] of [["avc1.640028", "avc"], ["avc1.4d0028", "avc"], ["avc1.42e028", "avc"], ["vp09.00.40.08", "vp9"], ["av01.0.08M.08", "av1"]]) {
+      try { const r = await VideoEncoder.isConfigSupported({ codec, width: W, height: H, bitrate: Math.round(W * H * FPS * 0.12), framerate: FPS }); if (r.supported) return { codec, muxer }; } catch {}
+    }
+    return null;
+  }
+  async function pickAudioCodec() {
+    if (!window.AudioEncoder) return null;
+    for (const [codec, muxer] of [["mp4a.40.2", "aac"], ["opus", "opus"]]) {
+      try { const r = await AudioEncoder.isConfigSupported({ codec, sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 }); if (r.supported) return { codec, muxer }; } catch {}
+    }
+    return null;
+  }
+  async function prepareFrame(t) {
+    const at = clipAt(t); if (!at) return;
+    const m = mediaOf(at.clip);
+    if (m.kind === "video") { await seekEl(m.el, at.clip.in + (t - at.start) * at.clip.speed); if (m.el.readyState < 2) await new Promise((r) => { m.el.addEventListener("loadeddata", r, { once: true }); setTimeout(r, 1500); }); }
+    await seekAux(t);
+  }
+  async function exactExport(W, H) {
+    const T = total(), N = Math.max(1, Math.round(T * FPS));
+    const vc = await pickVideoCodec(W, H); if (!vc) throw new Error("This browser can't encode video frame by frame. Choose Real time instead.");
+    pause();
+    OFF = { cancelled: false };
+    $("#vExporting").hidden = false; $("#vExport").hidden = true; $("#vCancel").hidden = false; $("#vExpResult").textContent = ""; document.body.classList.add("v-exporting");
+    const prog = (p, text) => { $("#vExpBar").style.width = Math.round(p * 100) + "%"; $("#vExpPct").textContent = text; };
+    try {
+      prog(0, "Mixing the sound…");
+      const mix = await renderAudioMix(T), ac = mix ? await pickAudioCodec() : null;
+      const muxer = new Mp4Muxer.Muxer({ target: new Mp4Muxer.ArrayBufferTarget(), video: { codec: vc.muxer, width: W, height: H, frameRate: FPS }, ...(ac ? { audio: { codec: ac.muxer, numberOfChannels: 2, sampleRate: 48000 } } : {}), fastStart: "in-memory", firstTimestampBehavior: "offset" });
+      let encErr = null;
+      if (ac) {
+        const ae = new AudioEncoder({ output: (chunk, meta) => muxer.addAudioChunk(chunk, meta), error: (e) => (encErr = e) });
+        ae.configure({ codec: ac.codec, sampleRate: 48000, numberOfChannels: 2, bitrate: 128000 });
+        const L = mix.length, c0 = mix.getChannelData(0), c1 = mix.numberOfChannels > 1 ? mix.getChannelData(1) : c0, step = 4800;
+        for (let off = 0; off < L; off += step) { const n = Math.min(step, L - off), data = new Float32Array(n * 2); data.set(c0.subarray(off, off + n), 0); data.set(c1.subarray(off, off + n), n); const ad = new AudioData({ format: "f32-planar", sampleRate: 48000, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round((off / 48000) * 1e6), data }); ae.encode(ad); ad.close(); }
+        await ae.flush(); ae.close();
+      }
+      const ve = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (e) => (encErr = e) });
+      ve.configure({ codec: vc.codec, width: W, height: H, bitrate: Math.round(W * H * FPS * 0.12), framerate: FPS, ...(vc.muxer === "avc" ? { avc: { format: "avc" } } : {}) });
+      const canvas = mk(W, H), ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (Object.keys(V.trans).length) await ensureSnaps(W, H);
+      const t0 = performance.now();
+      for (let i = 0; i < N; i++) {
+        if (OFF.cancelled) throw new Error("cancelled");
+        if (encErr) throw encErr;
+        const t = Math.min(i / FPS, T - 0.001);
+        await prepareFrame(t);
+        renderFrame(ctx, W, H, t);
+        const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / FPS), duration: Math.round(1e6 / FPS) });
+        ve.encode(frame, { keyFrame: i % (FPS * 2) === 0 }); frame.close();
+        while (ve.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 4));
+        if (i % 6 === 0) { P.t = t; pctx.drawImage(canvas, 0, 0, PW, PH); updateTime(); const fps = (i + 1) / ((performance.now() - t0) / 1000); prog((i + 1) / N, `${Math.round(((i + 1) / N) * 100)}% · frame ${i + 1} of ${N} · ${fps.toFixed(0)} frames a second (${(fps / FPS).toFixed(1)}× real time)`); }
+      }
+      await ve.flush(); ve.close(); if (encErr) throw encErr;
+      muxer.finalize();
+      const blob = new Blob([muxer.target.buffer], { type: "video/mp4" }), name = `fastedit-${W}x${H}.mp4`, url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+      const secs = (performance.now() - t0) / 1000;
+      $("#vExpResult").textContent = `Downloaded ${name} (${(blob.size / 1048576).toFixed(1)} MB) in ${secs.toFixed(1)} s${ac ? "" : mix ? " (this browser can't encode audio, so it has no sound)" : ""}.`;
+      FE.toast("Exported " + name); window.__lastExport = { size: blob.size, type: blob.type, name, secs };
+    } catch (e) {
+      $("#vExpResult").textContent = e.message === "cancelled" ? "Export cancelled." : `Export stopped: ${e.message || e}. Try again, or choose Real time.`;
+    } finally {
+      OFF = null; $("#vExporting").hidden = true; $("#vExport").hidden = false; $("#vCancel").hidden = true; document.body.classList.remove("v-exporting");
+      seek(0);
+    }
   }
   $("#vRes").onchange = exportInfo;
   $("#vExportBtn").onclick = () => { switchTab("export"); exportInfo(); };
-  $("#vExport").onclick = startExport;
-  $("#vCancel").onclick = () => { if (!EXP) return; EXP.cancelled = true; pause(); try { EXP.rec.stop(); } catch {} };
+  $("#vExport").onclick = () => { if (canExact() && $("#vExpMode").value === "exact") { const [W, H] = dims(+$("#vRes").value); exactExport(W, H); } else startExport(); };
+  $("#vCancel").onclick = () => { if (OFF) { OFF.cancelled = true; return; } if (!EXP) return; EXP.cancelled = true; pause(); try { EXP.rec.stop(); } catch {} };
   async function startExport() {
     const mime = pickMime(); if (!mime || EXP) return;
     const [W, H] = dims(+$("#vRes").value), canvas = mk(W, H);
@@ -919,6 +1145,7 @@
       else if (op.op === "transitions") { if (V.clips.length < 2) extra.push("didn't add transitions because there's only one clip (split it or add more clips first)"); else { const n = setAllTransitions(op.type, op.dur || 0.8); extra.push(`added a ${TR_NAMES[op.type].toLowerCase()} to ${n === 1 ? "the cut" : `all ${n} cuts`}`); } }
       else if (op.op === "duck") { if (!musicMedia()) extra.push("couldn't duck the music because there's no music yet (Edit › Music › Add music)"); else { V.music.duck = true; await analyzeAllAudio(); extra.push("set the music to dip whenever someone speaks"); } }
       else if (op.op === "kenburns") { const imgs = V.clips.filter((c) => mediaOf(c).kind === "image"); imgs.forEach((c) => (c.kb = true)); extra.push(imgs.length ? `added a slow zoom to ${imgs.length} photo${imgs.length > 1 ? "s" : ""}` : "found no photos on the timeline to zoom (add photos with Add video)"); }
+      else if (op.op === "animate") { const targets = V.overlays.filter((o) => o.kind === "text" || o.type === "media"); targets.forEach((o) => animPreset(o, op.style)); extra.push(targets.length ? `animated ${targets.length === 1 ? "the " + (targets[0].kind === "text" ? "caption" : "overlay") : targets.length + " overlays"} (${{ fly: "flying in and out", pop: "popping in", push: "slowly pushing in", slide: "sliding across", fade: "fading in and out" }[op.style]})` : "found no captions or overlays to animate (add one first)"); }
       else if (op.op === "volume") { V.volume = clamp(Math.round((V.volume + op.d) * 100) / 100, 0, 2); V.muted = false; applyVolume(); extra.push(`set the volume to ${Math.round(V.volume * 100)}%`); }
     }
     for (const job of plan.jobs) {
