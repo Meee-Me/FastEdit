@@ -298,6 +298,8 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
 .msg.ai { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; }
 .msg-text { line-height: 1.6; font-size: 13.5px; padding-top: 3px; overflow-wrap: anywhere; }
 .msg-text b { color: var(--fg); font-weight: 600; }
+.msg-img { display: block; width: 100%; max-width: 420px; margin-top: 10px; border-radius: 10px; border: 1px solid var(--line); }
+.msg-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .msg-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .typing { display: inline-flex; gap: 4px; padding-top: 9px; }
 .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite ease-in-out; }
@@ -668,6 +670,7 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
 <script src="fastai.js"></script>
 <script src="tone.js"></script>
 <script src="chat.js"></script>
+<script src="thumb.js"></script>
 <script>
 (() => {
 "use strict";
@@ -1306,10 +1309,27 @@ function mountPhotoChat() {
     mode: "photo",
     placeholder: "Message Fast Edit AI…",
     welcome: "Hi! I'm **Fast Edit AI**. I can edit this photo for you, answer questions about any tool, or critique your picture. What would you like to do?",
-    starters: ["Auto-enhance", "Blur the background", "Remove the background", "Critique this photo", "What can you do?"],
+    starters: ["Auto-enhance", "Blur the background", "Make a thumbnail", "Critique this photo", "What can you do?"],
     edit: photoEdit,
     undo: () => { const had = !$("#btnUndo").disabled; if (had) doUndo(); return had; },
     makePoster: photoPoster,
+    makeThumbnail: async (topic) => {
+      setBusy(true, "Designing the thumbnail…"); await new Promise(r => setTimeout(r, 30));
+      try {
+        doRender();
+        const title = topic || FastAI.caption(FastAI.analyze(view), String(Date.now()));
+        const th = await FastThumb.make({ frame: clone(view), title });
+        newDocument(FastThumb.W, FastThumb.H, clone(th.layers.background), "Thumbnail background");
+        addLayer(makeLayer("Thumbnail title", clone(th.layers.title)));
+        return { text: `Here's a 1280 × 720 thumbnail${topic ? "" : ` (I titled it “${title}”; say “make a thumbnail called "…"” for your own words)`}: punchier color${th.outlined ? ", the subject outlined" : ""} and a big title. It's open here now with the title on its own layer, so you can move or restyle it. Undo brings your photo back.`,
+          image: th.canvas, imageAlt: "Thumbnail: " + title, actions: [{ label: "Download thumbnail", primary: true, run: () => { FastThumb.download(th.canvas, "fastedit-thumbnail.png"); toast("Downloaded fastedit-thumbnail.png"); } }], chips: ["Make the title smaller", "Undo that"] };
+      } finally { setBusy(false); }
+    },
+    autoEdit: async (topic, secs, text) => {
+      const vb = document.querySelector('[data-app-mode="video"]'); if (vb) vb.click();
+      setTimeout(() => window.FEChat.get("video")?.send(text), 400);
+      return { text: "Editing happens in Video mode, so I've switched over and started there." };
+    },
     makeVideo: async (topic, text) => {
       const vb = document.querySelector('[data-app-mode="video"]'); if (vb) vb.click();
       setTimeout(() => window.FEChat.get("video")?.send(text), 400);

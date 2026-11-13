@@ -23,7 +23,9 @@ The AI tab is a chat, in the style of ChatGPT or Claude, with one conversation f
 - **Edits**: "make it warmer and add a vignette", "blur the background", "trim the first 2 seconds", "vertical for TikTok".
 - **Follow-ups**: "stronger", "a bit less", "undo that".
 - **Questions**: "how do I crop?", "how do I export?", "is my photo uploaded anywhere?" are answered from a built-in guide to Fast Edit.
-- **Creating**: "make a video about Fast Edit" builds an animated title-card video; "make a poster about Summer Sale" designs a poster from your photo.
+- **Editing by itself**: "edit it for me" (optionally "…about my trip to Rome" or "…in 30 seconds") does the whole edit of your footage on its own: splits scenes, keeps the best parts of long videos, removes silent pauses, cleans up and evens out the sound, balances the color, adds a slow zoom to photos, crossfades on every cut, a title intro, fades, and music ducking. Then it makes a thumbnail. It's all one Undo step.
+- **Thumbnails**: "make a thumbnail" (or "…called \"My Trip\"") picks the most eye-catching frame (sharp, colorful, well exposed, with a clear subject), punches up the color, outlines the subject when there is one, and sets a big bold title at 1280 × 720. It appears in the chat with **Download** and **Edit in Photo mode** buttons, where the title is its own layer. In Photo mode it turns the current photo into a thumbnail.
+- **Creating**: "make a video about Fast Edit" builds an animated title-card video when there's no footage, or edits your footage with that title when there is; "make a poster about Summer Sale" designs a poster from your photo.
 - **Small talk**: hello, thanks, "who are you", "what can you do", and a joke if you ask.
 
 It's still the on-device AI built from scratch, not a large language model: it can't answer general knowledge questions, and it says so politely.

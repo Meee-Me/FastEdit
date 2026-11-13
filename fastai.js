@@ -913,6 +913,8 @@
     { k: "sign account deluxe login looks sync", photo: "Tap **Sign in with Deluxe Main** at the top right. Your saved looks then follow you to every device. Signing in is optional.", video: "Tap **Sign in with Deluxe Main** at the top right. Your saved looks then follow you to every device." },
     { k: "privacy upload uploaded anywhere server private data cloud safe leave device", photo: "Your photos and videos never leave your device. I run entirely in your browser. Only your saved looks are stored in your Deluxe account, and only if you sign in." },
     { k: "shortcut shortcuts keyboard keys hotkey", photo: "B brush, E eraser, T text, I eyedropper, C crop, M select, U shape, G gradient, K bucket, S clone, H pan, [ ] brush size, Ctrl+Z undo, Ctrl+A select all, Ctrl+D deselect, Ctrl+J copy to new layer, Ctrl+M curves, Ctrl+S save project.", video: "Space play/pause, ← → step one frame (Shift for a second), S split, Delete removes the selected clip, Ctrl+Z undo." },
+    { k: "thumbnail thumbnails cover youtube", photo: "Ask me “make a thumbnail” (add a title like “make a thumbnail called \"My Trip\"”). I'll turn the photo into a bold 1280×720 thumbnail with a big title. You can download it or keep editing it here.", video: "Ask me “make a thumbnail”. I'll pick the best frame of your video, punch up the colors, outline the subject and add a big title. Download it from the chat or open it in Photo mode to change it." },
+    { k: "auto automatic automatically itself edit for me", video: "Say “edit it for me” (or “edit it for me, about my trip”). I'll split scenes, keep the best parts, remove silences, clean the sound, fix the color, add crossfades, an intro and fades, then make a thumbnail. It's one undo step.", photo: "Switch to Video and say “edit it for me”, or in Photo mode try “auto-enhance”." },
     { k: "look looks preset presets save style", photo: "Set up adjustments, then in **Adjust › My looks** name it and tap **Save current look**. Looks work on photos and videos." },
     { k: "clone stamp heal spot retouch blemish", photo: "Use the **Clone stamp** (S): Alt-click (or tap **Pick source**) where to copy from, then paint over the spot." },
     { k: "gradient shape rectangle ellipse arrow fill bucket", photo: "The **Shape** tool (U) draws rectangles, ellipses, lines and arrows on a new layer. **Gradient** (G) fills with a linear or radial blend, and the **Paint bucket** (K) fills areas of similar color." },
@@ -933,9 +935,11 @@
   function topicOf(t) {
     const m = String(t).match(/\b(?:about|for|on|of|called|named|titled)\s+(.{2,60})$/i);
     if (!m) return null;
-    const topic = m[1].replace(/[.!?]+$/, "").trim();
+    const topic = m[1].replace(/[.!?]+$/, "").replace(/^["“”']+|["“”']+$/g, "").trim();
+    if (!topic || /^(me|it|this|that|us)$/i.test(topic)) return null;
     return /^fast\s*edit$/i.test(topic) ? "Fast Edit" : topic;
   }
+  function titleIn(t) { const m = String(t).match(/["“”']([^"“”']{2,60})["“”']/) || String(t).match(/\b(?:called|titled|saying|that says)\s+(.{2,50})$/i); return m ? m[1].trim() : null; }
   const JOKES = ["Why did the photo go to therapy? It had too many negative memories.", "I told my video editor a joke about cropping. It didn't make the cut.", "Why don't pixels ever get lost? They always know their place on the grid.", "My camera and I broke up. It said I only liked it for its lens."];
   let jokeN = 0;
   // Decides whether a message is conversation (answered in words) or an edit (handed to the planner).
@@ -946,6 +950,9 @@
     const { clauses } = splitClauses(t);
     const top = classify(t)[0];
     const video = mode === "video";
+    if (isQuestion(t)) { const a = faq(t, video ? "video" : "photo"); if (a) return { kind: "answer", text: a }; }
+    if (/\b(thumbnail|thumb nail|cover image|cover photo)\b/i.test(t)) return { kind: "make_thumbnail", topic: titleIn(t) || topicOf(t.replace(/\bthumbnail\b/i, "").replace(/\bfor me\b/gi, "")) };
+    if (/\b(edit (it|this|my (video|clips?|footage))? ?for me|auto[- ]?edit|by (it|your)self|do (it|everything|the editing) for me|make (it|this|my video) (into )?a (good|great|nice|finished|polished|proper) video|make a video (from|out of|with|using) (my|these|this|the) (clips?|footage|videos?)|edit my (video|clips|footage))\b/i.test(t)) return { kind: "auto_edit", topic: titleIn(t) || topicOf(t.replace(/\bfor me\b/gi, "").replace(/\b(by (it|your)self|auto[- ]?edit)\b/gi, "")), secs: (t.match(/(\d+)\s*(?:s|sec|second)/i) || [])[1] ? +t.match(/(\d+)\s*(?:s|sec|second)/i)[1] : null };
     if (/\b(make|create|generate|build|produce)\b.*\b(video|promo|trailer|intro|slideshow|reel|title sequence)\b/i.test(t)) return { kind: "make_video", topic: topicOf(t) || (/fast\s*edit/i.test(t) ? "Fast Edit" : null) };
     if (/\b(make|create|design|generate)\b.*\b(poster|flyer|thumbnail|cover)\b/i.test(t)) return { kind: "make_poster", topic: topicOf(t) };
     if (isQuestion(t)) { const a = faq(t, video ? "video" : "photo"); if (a) return { kind: "answer", text: a }; }
@@ -976,7 +983,7 @@
   global.FastAI = {
     version: "1.0",
     train, get ready() { return net.ready; }, get stats() { return net.stats; },
-    classify, analyze, plan, renderJob, removeBackground, critique, sentence, rngFrom, hashStr, converse, fallback, faq, topicOf,
+    classify, analyze, plan, renderJob, removeBackground, critique, sentence, rngFrom, hashStr, converse, fallback, faq, topicOf, caption,
     skills: Object.keys(PRETTY).map((k) => PRETTY[k]),
   };
 })(window);

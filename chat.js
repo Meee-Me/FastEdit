@@ -47,6 +47,15 @@
         for (let i = 0; i < words.length; i += step) { textEl.innerHTML = md(words.slice(0, i + step).join("")); scroll(); await new Promise((r) => setTimeout(r, 16)); }
         textEl.innerHTML = html;
       }
+      if (reply.image) {
+        const img = document.createElement("img"); img.className = "msg-img"; img.alt = reply.imageAlt || "Image made by Fast Edit AI";
+        img.src = typeof reply.image === "string" ? reply.image : reply.image.toDataURL("image/jpeg", 0.88); body.append(img);
+      }
+      if (reply.actions && reply.actions.length) {
+        const row = document.createElement("div"); row.className = "msg-actions";
+        for (const a of reply.actions) { const b = document.createElement("button"); b.type = "button"; b.className = "btn sm" + (a.primary ? " primary" : ""); b.textContent = a.label; b.onclick = () => a.run(); row.append(b); }
+        body.append(row);
+      }
       if (reply.tags && reply.tags.length) { const t = document.createElement("div"); t.className = "understood"; for (const x of reply.tags) { const s = document.createElement("span"); s.textContent = x; t.append(s); } body.append(t); }
       if (reply.chips && reply.chips.length) {
         const c = document.createElement("div"); c.className = "msg-chips";
@@ -80,6 +89,8 @@
         }
         case "make_video": return await cfg.makeVideo(r.topic, text);
         case "make_poster": return await cfg.makePoster(r.topic, text);
+        case "make_thumbnail": return await cfg.makeThumbnail(r.topic, text);
+        case "auto_edit": return await cfg.autoEdit(r.topic, r.secs, text);
         default: {
           try {
             const res = await cfg.edit(text);

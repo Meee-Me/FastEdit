@@ -1168,8 +1168,8 @@
     const T = topic.replace(/\b\w/g, (c) => c.toUpperCase());
     return [T, `A short film about ${topic}`, "Made with Fast Edit"];
   }
-  function makeCardMedia(topic) {
-    const lines = scriptFor(topic), per = 2.6, ar = V.ratio === "original" && !V.clips.some((c) => !mediaOf(c).sample) ? 16 / 9 : outAspect();
+  function makeCardMedia(topic, maxLines) {
+    const lines = scriptFor(topic).slice(0, maxLines || 99), per = 2.6, ar = V.ratio === "original" && !V.clips.some((c) => !mediaOf(c).sample) ? 16 / 9 : outAspect();
     const w = ar >= 1 ? 1280 : 720, h = ar >= 1 ? Math.round(1280 / ar) : 1280;
     const r = AI.rngFrom(AI.hashStr(topic)), hue = Math.round(r() * 360), font = FE.FONTS.display || "system-ui, sans-serif", body = FE.FONTS.sans || "system-ui, sans-serif";
     const blobs = Array.from({ length: 7 }, () => ({ x: r(), y: r(), s: 0.25 + r() * 0.35, v: 0.02 + r() * 0.04, h: hue + (r() - 0.5) * 90 }));
@@ -1199,7 +1199,9 @@
     m.draw(m.ctx, 0.8); m.thumb = thumbFrom(m.canvas, w, h);
     return { m, lines };
   }
+  const realClips = () => V.clips.filter((c) => { const m = mediaOf(c); return !m.sample && !m.generated; });
   async function makeVideo(topic) {
+    if (topic && realClips().length) return autoEdit(topic, null);
     if (!topic) return { text: "I'd love to! What should the video be about? For example: “make a video about Fast Edit” or “make a video about my trip to Rome”.", chips: ["Make a video about Fast Edit", "Make a video about summer"] };
     try { await document.fonts.load(`800 60px ${FE.FONTS.display}`); } catch {}
     pause(); pushUndo();
@@ -1212,12 +1214,112 @@
     addOverlay({ kind: "bokeh", clause: "", k: 0.7 }, AI.analyze(frameCanvasNoOverlays()), { start: 0, end: m.duration });
     refreshAll(); await seek(0);
     const len = short(m.duration);
+    const th = await makeThumbnail(topic, { quiet: true });
     return {
+      image: th.image, actions: th.actions,
       text: onlySample
         ? `Here's a ${len} video about **${topic}**: ${lines.length} animated title cards (“${lines.slice(0, 2).join("”, “")}”…) over a moving color background with drifting bokeh lights, a fade in and a fade out. Press **Play** to watch, or **Export video** to save it.`
         : `I added a ${len} animated intro about **${topic}** (${lines.length} title cards) at the start of your timeline, with drifting bokeh lights and fades. Press **Play** to watch it.`,
-      chips: ["Vertical for TikTok", "Add falling snow", "Export it"],
+      chips: ["Vertical for TikTok", "Add falling snow", "Make another thumbnail"],
     };
+  }
+
+  /* ---------- thumbnail ---------- */
+  const cleanName = (n) => String(n || "").replace(/^(Sample|Video): /, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  let thumbTimes = [], lastTopic = null;
+  async function makeThumbnail(topic, opts = {}) {
+    if (!V.clips.length) return { text: "Add a video first, then ask me for a thumbnail." };
+    pause(); busy(true, "Looking for the best frame…");
+    try {
+      const T = total(), n = Math.min(24, Math.max(6, Math.round(T * 2))), real = realClips().length > 0, titleVideo = !real && mediaOf(V.clips[0]).generated;
+      if (!opts.again) thumbTimes = [];
+      let best;
+      if (titleVideo) best = { t: Math.min(1.2, T / 2) };
+      else {
+        const cands = [];
+        for (let i = 0; i < n; i++) {
+          const t = T * (0.05 + (0.9 * (i + 0.5)) / n);
+          if (thumbTimes.some((u) => Math.abs(u - t) < Math.max(1, T / 12))) continue;
+          await prepareFrame(t); const [w, h] = dims(240), c = mk(w, h); renderFrame(c.getContext("2d"), w, h, t, { noOverlays: true }); cands.push({ t, canvas: c });
+        }
+        best = FastThumb.pickBest(cands) || { t: T / 2 };
+      }
+      thumbTimes.push(best.t);
+      await prepareFrame(best.t);
+      const [W, H] = dims(1080), big = mk(W, H); renderFrame(big.getContext("2d"), W, H, best.t, { noOverlays: !titleVideo });
+      const textOv = V.overlays.find((o) => o.kind === "text"), fileName = cleanName((realClips()[0] && mediaOf(realClips()[0]).name) || "");
+      const looksLikeFile = !fileName || /^(img|vid|mov|dsc|pxl|video|clip|test|screen|untitled)?[\s\d]*$/i.test(fileName) || /\d{4,}/.test(fileName);
+      if (topic) lastTopic = topic;
+      const title = topic || lastTopic || (textOv && textOv.job.text) || (!looksLikeFile && realClips().length ? fileName : AI.caption(AI.analyze(big), String(best.t)));
+      busy(true, "Designing the thumbnail…");
+      const th = await FastThumb.make({ frame: big, title, hasTitle: titleVideo });
+      await seek(P.t);
+      const actions = [{ label: "Download thumbnail", primary: true, run: () => { FastThumb.download(th.canvas, "fastedit-thumbnail.png"); FE.toast("Downloaded fastedit-thumbnail.png"); } },
+        { label: "Edit in Photo mode", run: () => openThumbInPhoto(th) }];
+      return {
+        text: opts.quiet ? "" : `Here's a thumbnail made from the frame at ${fmt(best.t)}: ${titleVideo ? "the opening title card with punchier color" : `the most eye-catching moment with punchier color${th.outlined ? ", the subject outlined" : ""} and a big title, “${title}”`}. It's 1280 × 720, the size YouTube uses.`,
+        image: th.canvas, imageAlt: `Thumbnail: ${title}`, actions, chips: ["Make another thumbnail", "Edit it for me"],
+      };
+    } finally { busy(false); }
+  }
+  function openThumbInPhoto(th) {
+    document.querySelector('[data-app-mode="photo"]').click();
+    FE.newDocument(FastThumb.W, FastThumb.H, FE.clone(th.layers.background), "Thumbnail background");
+    FE.addLayer(FE.makeLayer("Thumbnail title", FE.clone(th.layers.title)));
+    FE.toast("Opened the thumbnail in Photo mode. The title is its own layer");
+  }
+
+  /* ---------- "edit it for me": the whole edit, done automatically ---------- */
+  async function autoEdit(topic, secs) {
+    if (topic) lastTopic = topic;
+    if (!realClips().length) {
+      const r = await makeVideo(topic || "Fast Edit");
+      return { ...r, text: "You haven't added any footage yet, so I made a video from scratch. " + r.text + " Add your own clips with **Add video** and say “edit it for me” to have me edit them." };
+    }
+    pause();
+    const before = snap(), undoLen = undoS.length, steps = [], t0 = performance.now();
+    const say = (t) => busy(true, t);
+    try {
+      V.clips = V.clips.filter((c) => !mediaOf(c).sample);
+      if (V.clips.length < 6) { say("Finding the scenes…"); const n = await detectScenes(() => {}); if (n) steps.push(`split it at ${n} scene change${n > 1 ? "s" : ""}`); }
+      const T0 = total(), target = secs || (T0 > 45 ? 30 : null);
+      if (target && target < T0 - 1) { say("Finding the best moments…"); steps.push(await bestParts(target, (p) => ($("#vBusyText").textContent = `Finding the best moments… ${Math.round(p * 100)}%`))); }
+      say("Listening to the sound…"); ensureAudio(); await analyzeAllAudio();
+      if (hasSound()) {
+        const r = await removeSilence(false); if (r.cut) steps.push(r.msg);
+        V.sfx = { ...V.sfx, level: true, hum: true }; rebuildAll(); steps.push("cleaned up the sound and evened out the loudness");
+      }
+      say("Grading the color…");
+      const tm = Math.min(total() * 0.4, total() - 0.1); await prepareFrame(tm);
+      const frame = mk(PW, PH); renderFrame(frame.getContext("2d"), PW, PH, tm, { noOverlays: true, before: true });
+      const plan = AI.plan("auto enhance", { mode: "video", adj: { ...DEF }, image: frame });
+      for (const k of Object.keys(DEF)) if (typeof plan.adjustments[k] === "number" && k !== "sharpen") V.adj[k] = plan.adjustments[k];
+      steps.push("balanced the color and exposure");
+      const imgs = V.clips.filter((c) => mediaOf(c).kind === "image"); imgs.forEach((c) => (c.kb = true)); if (imgs.length) steps.push(`added a slow zoom to ${imgs.length} photo${imgs.length > 1 ? "s" : ""}`);
+      if (V.clips.length > 1) { const n = setAllTransitions("cross", 0.5); steps.push(`added crossfades on ${n} cut${n > 1 ? "s" : ""}`); }
+      if (topic) {
+        try { await document.fonts.load(`800 60px ${FE.FONTS.display}`); } catch {}
+        const { m } = makeCardMedia(topic, 2); V.media.push(m); const intro = { id: uid++, mediaId: m.id, in: 0, out: m.duration, speed: 1 };
+        V.overlays.forEach((o) => { if (!o.full) { o.start += m.duration; o.end += m.duration; } });
+        if (V.music) V.music.start += m.duration;
+        V.clips.unshift(intro); if (V.clips[1]) V.trans[V.clips[1].id] = { type: "cross", dur: 0.6 };
+        steps.push(`added a ${short(m.duration)} title intro about “${topic}”`);
+      }
+      V.fadeIn = Math.max(V.fadeIn, 0.6); V.fadeOut = Math.max(V.fadeOut, 1); steps.push("added a fade in and a fade out");
+      if (musicMedia()) { V.music.duck = true; steps.push("set the music to dip whenever someone talks"); }
+      undoS.length = undoLen; undoS.push(before); redoS.length = 0; updUndo();
+      V.sel = V.clips[0].id; resize(); refreshAll(); await seek(0);
+      const th = await makeThumbnail(topic, { quiet: true });
+      const secsTaken = ((performance.now() - t0) / 1000).toFixed(1);
+      return {
+        text: `Done! I edited it by myself in ${secsTaken} s: I ${AI.sentence(steps).replace(/\.$/, "").replace(/^./, (c) => c.toLowerCase())}. It's now **${short(total())}** long. I also made the thumbnail below. Press **Play** to watch, or **Export video** to save it. One **Undo** puts everything back.`,
+        image: th.image, imageAlt: th.imageAlt, actions: th.actions,
+        chips: ["Vertical for TikTok", "Make another thumbnail", "Undo that"],
+      };
+    } catch (e) {
+      undoS.length = undoLen; restore(before); undoS.length = undoLen; updUndo();
+      throw e;
+    } finally { busy(false); }
   }
   let videoChat = null;
   function mountVideoChat() {
@@ -1225,10 +1327,12 @@
       mode: "video",
       placeholder: "Message Fast Edit AI…",
       welcome: "Hi! I'm **Fast Edit AI**. I can edit your video: trim and shorten it, add transitions and captions, grade the color, clean up the sound, or make a whole video from a topic. What should we make?",
-      starters: ["Make a video about Fast Edit", "Make it 15 seconds with the best parts", "Vertical for TikTok", "Remove the silent parts", "What can you do?"],
+      starters: ["Edit it for me", "Make a video about Fast Edit", "Make a thumbnail", "Vertical for TikTok", "What can you do?"],
       edit: videoEdit,
       undo: () => { const had = undoS.length > 0; if (had) undo(); return had; },
       makeVideo: (topic) => makeVideo(topic),
+      makeThumbnail: (topic, text) => makeThumbnail(topic, { again: /another|again|different|new one/i.test(text || "") }),
+      autoEdit: (topic, secs) => autoEdit(topic, secs),
       makePoster: async () => ({ text: "Posters are made in Photo mode. Switch to **Photo** at the top and ask me there.", chips: ["Make a video about Fast Edit"] }),
     });
     if (window.__feAIStatus) videoChat.setStatus(window.__feAIStatus, AI.ready ? "ok" : "");
@@ -1264,7 +1368,7 @@
   mountVideoChat();
   let saved = "photo"; try { saved = localStorage.getItem("fastedit.mode") || "photo"; } catch {}
   if (saved === "video") setMode("video");
-  window.FEVideo = { V, seek, total, play, pause, addFiles, makeVideo, get exporting() { return !!EXP; },
+  window.FEVideo = { V, seek, total, play, pause, addFiles, makeVideo, makeThumbnail, autoEdit, get exporting() { return !!EXP; },
     getAdj: () => ({ ...V.adj }),
     applyLook(adj) { pushUndo(); V.adj = { ...DEF }; for (const k of Object.keys(DEF)) if (typeof adj[k] === "number" && k !== "sharpen") { const [mn, mx] = k in FE.RANGE ? FE.RANGE[k] : [-100, 100]; V.adj[k] = Math.round(clamp(adj[k], mn, mx)); } syncAdj(); redrawSoon(); },
   };
