@@ -18,7 +18,8 @@
   const NAMES = { text: "Text", frame: "Frame", light_leak: "Light leak", glow: "Glow", flare: "Lens flare", stars: "Stars", birds: "Birds", sparkles: "Sparkles", snow: "Snow", rain: "Rain", bokeh: "Bokeh", confetti: "Confetti", hearts: "Hearts", moon: "Moon", sunset_stripes: "Retro sun", clouds: "Clouds", abstract: "Abstract art" };
 
   /* ================= state ================= */
-  const V = { media: [], clips: [], overlays: [], adj: { ...DEF }, ratio: "original", follow: false, frame: { x: 0.5, y: 0.5 }, muted: false, volume: 1, fadeIn: 0, fadeOut: 0, grade: 0, sel: null, selOv: null, sfx: { level: false, hum: false, voice: false, bass: false } };
+  const V = { media: [], clips: [], overlays: [], adj: { ...DEF }, ratio: "original", follow: false, frame: { x: 0.5, y: 0.5 }, muted: false, volume: 1, fadeIn: 0, fadeOut: 0, grade: 0, sel: null, selOv: null, sfx: { level: false, hum: false, voice: false, bass: false }, tone: Tone.defaultTone(), wheels: Tone.defaultWheels(), trans: {}, music: null };
+  let tlZoom = 1;
   let uid = 1, started = false, PW = 960, PH = 540;
   const view = $("#vCanvas"), pctx = view.getContext("2d", { willReadFrequently: true });
 
@@ -37,9 +38,9 @@
 
   /* ================= undo ================= */
   const undoS = [], redoS = [];
-  const snap = () => ({ clips: V.clips.map((c) => ({ ...c })), overlays: V.overlays.map((o) => ({ ...o })), adj: { ...V.adj }, ratio: V.ratio, follow: V.follow, frame: { ...V.frame }, muted: V.muted, volume: V.volume, fadeIn: V.fadeIn, fadeOut: V.fadeOut, grade: V.grade, sel: V.sel, selOv: V.selOv, sfx: { ...V.sfx } });
+  const snap = () => ({ clips: V.clips.map((c) => ({ ...c })), overlays: V.overlays.map((o) => ({ ...o })), adj: { ...V.adj }, ratio: V.ratio, follow: V.follow, frame: { ...V.frame }, muted: V.muted, volume: V.volume, fadeIn: V.fadeIn, fadeOut: V.fadeOut, grade: V.grade, sel: V.sel, selOv: V.selOv, sfx: { ...V.sfx }, tone: Tone.cloneTone(V.tone), wheels: JSON.parse(JSON.stringify(V.wheels)), trans: JSON.parse(JSON.stringify(V.trans)), music: V.music ? { ...V.music } : null });
   function pushUndo() { undoS.push(snap()); if (undoS.length > 40) undoS.shift(); redoS.length = 0; updUndo(); }
-  function restore(s) { Object.assign(V, s); applyVolume(); rebuildAll(); resize(); refreshAll(); seek(Math.min(P.t, total())); }
+  function restore(s) { Object.assign(V, s); applyVolume(); rebuildAll(); syncMusic(P.t, false); resize(); refreshAll(); seek(Math.min(P.t, total())); }
   function undo() { if (!undoS.length) return; redoS.push(snap()); restore(undoS.pop()); updUndo(); }
   function redo() { if (!redoS.length) return; undoS.push(snap()); restore(redoS.pop()); updUndo(); }
   function updUndo() { $("#vUndo").disabled = !undoS.length; $("#vRedo").disabled = !redoS.length; }
@@ -103,22 +104,43 @@
       };
     });
   }
+  function loadImageFile(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onload = () => { const m = { id: uid++, kind: "image", name: file.name.replace(/\.[^.]+$/, ""), url, el: img, w: img.naturalWidth, h: img.naturalHeight, duration: 600 }; m.thumb = thumbFrom(img, m.w, m.h); resolve(m); };
+      img.onerror = () => reject(new Error(`“${file.name}” isn't an image this browser can open.`));
+      img.src = url;
+    });
+  }
+  function loadAudioFile(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file), el = document.createElement("audio");
+      el.preload = "auto"; el.src = url;
+      el.onloadedmetadata = () => resolve({ id: uid++, kind: "audio", name: file.name.replace(/\.[^.]+$/, ""), url, el, duration: el.duration, w: 1, h: 1 });
+      el.onerror = () => reject(new Error(`“${file.name}” can't be played in this browser.`));
+    });
+  }
   async function addFiles(files) {
-    const vids = [...files].filter((f) => f.type.startsWith("video/") || /\.(mp4|mov|webm|m4v|mkv|ogv)$/i.test(f.name));
-    if (!vids.length) return FE.toast("Choose a video file (MP4, MOV or WebM)");
+    const isVid = (f) => f.type.startsWith("video/") || /\.(mp4|mov|webm|m4v|mkv|ogv)$/i.test(f.name), isImg = (f) => f.type.startsWith("image/");
+    const vids = [...files].filter((f) => isVid(f) || isImg(f));
+    if (!vids.length) return FE.toast("Choose a video or photo (MP4, MOV, WebM, JPEG, PNG)");
     busy(true, "Loading video…");
     pushUndo();
     const replaceSample = V.clips.length && V.clips.every((c) => mediaOf(c).sample);
     if (replaceSample) { V.clips = []; V.overlays = []; }
     let added = 0;
     for (const f of vids) {
-      try { const m = await loadVideoFile(f); V.media.push(m); V.clips.push({ id: uid++, mediaId: m.id, in: 0, out: m.duration, speed: 1 }); added++; }
+      try {
+        if (isImg(f)) { const m = await loadImageFile(f); V.media.push(m); V.clips.push({ id: uid++, mediaId: m.id, in: 0, out: 4, speed: 1, kb: true }); }
+        else { const m = await loadVideoFile(f); V.media.push(m); V.clips.push({ id: uid++, mediaId: m.id, in: 0, out: m.duration, speed: 1 }); analyzeAudio(m).then(() => renderTimeline()); }
+        added++;
+      }
       catch (e) { FE.toast(e.message); }
     }
     busy(false);
     if (!added) { undoS.pop(); updUndo(); return; }
     resize(); refreshAll(); seek(replaceSample ? 0 : P.t);
-    FE.toast(added === 1 ? "Added 1 video to the timeline" : `Added ${added} videos to the timeline`);
+    FE.toast(added === 1 ? "Added 1 clip to the timeline" : `Added ${added} clips to the timeline`);
   }
 
   /* ================= audio ================= */
@@ -127,6 +149,33 @@
     if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); monitor = AC.createGain(); monitor.connect(AC.destination); recDest = AC.createMediaStreamDestination(); } catch { AC = null; return; } }
     if (AC.state === "suspended") AC.resume().catch(() => {});
     V.media.forEach(connectMedia); applyVolume();
+  }
+  function connectMusic(m) {
+    if (!AC || m.mnode) return;
+    try { m.mnode = AC.createMediaElementSource(m.el); m.mgain = AC.createGain(); m.mnode.connect(m.mgain); m.mgain.connect(monitor); m.mgain.connect(recDest); } catch {}
+  }
+  const musicMedia = () => (V.music ? V.media.find((m) => m.id === V.music.mediaId) : null);
+  function speechAt(t) {
+    const at = clipAt(t); if (!at) return false;
+    const m = mediaOf(at.clip), a = m.audio; if (!a || a.none || !a.has || V.muted) return false;
+    const lt = at.clip.in + (t - at.start) * at.clip.speed, w = Math.floor(lt * a.rate);
+    let mx = -99; for (let k = w - 3; k <= w + 3; k++) if (k >= 0 && k < a.db.length) mx = Math.max(mx, a.db[k]);
+    return mx > a.loud - 12;
+  }
+  function syncMusic(t, playing) {
+    const m = musicMedia();
+    for (const o of V.media) if (o.kind === "audio" && o !== m && !o.el.paused) o.el.pause();
+    if (!m) return;
+    if (AC) connectMusic(m);
+    const local = t - V.music.start, inRange = local >= 0 && local < m.duration - 0.05 && t < total() - 0.02;
+    if (playing && inRange) {
+      if (m.el.paused) { m.el.currentTime = local; m.el.play().catch(() => {}); }
+      else if (Math.abs(m.el.currentTime - local) > 0.3) m.el.currentTime = local;
+    } else if (!m.el.paused) m.el.pause();
+    let g = V.music.vol;
+    const T = total(); if (T - t < 1.5) g *= clamp((T - t) / 1.5, 0, 1);
+    if (V.music.duck && speechAt(t)) g *= 0.25;
+    if (m.mgain) m.mgain.gain.setTargetAtTime(g, AC.currentTime, 0.12); else m.el.volume = clamp(g, 0, 1);
   }
   function connectMedia(m) {
     if (m.kind !== "video" || m.node || !AC) return;
@@ -151,14 +200,14 @@
     m.fx = fx;
   }
   function rebuildAll() { for (const m of V.media) rebuildChain(m); }
-  function applyVolume() { const v = V.muted ? 0 : V.volume; for (const m of V.media) { if (m.gain) m.gain.gain.value = v; else if (m.el) { m.el.muted = V.muted; m.el.volume = clamp(V.volume, 0, 1); } } }
+  function applyVolume() { const v = V.muted ? 0 : V.volume; for (const m of V.media) { if (m.kind !== "video") continue; if (m.gain) m.gain.gain.value = v; else if (m.el) { m.el.muted = V.muted; m.el.volume = clamp(V.volume, 0, 1); } } }
 
   /* ================= sound analysis ================= */
   // Decodes a clip's soundtrack once and keeps only a loudness curve (20 per second),
   // the hum frequency if there is one, and the gain that brings speech to a steady level.
   async function analyzeAudio(m) {
     if (m.audio) return m.audio;
-    if (m.kind !== "video") return (m.audio = { none: true });
+    if (m.kind !== "video" && m.kind !== "audio") return (m.audio = { none: true });
     try {
       const buf = await (await fetch(m.url)).arrayBuffer();
       if (buf.byteLength > 500e6) return (m.audio = { none: true, tooBig: true });
@@ -318,27 +367,83 @@
     const a = tr[i - 1], b = tr[i], k = (lt - a.t) / (b.t - a.t);
     return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
   }
+  // Draws a clip's source frame into W×H with the output shape, subject-following and slow zoom.
+  function drawSrc(c, W, H, clip, m, src, lt) {
+    const ar = W / H, mar = m.w / m.h; let cw, ch; if (mar > ar) { ch = m.h; cw = ch * ar; } else { cw = m.w; ch = cw / ar; }
+    if (clip.kb) { const pz = clamp((lt - clip.in) / Math.max(0.1, clip.out - clip.in), 0, 1), z = 1 + 0.14 * pz; cw /= z; ch /= z; }
+    const f = V.follow && m.track ? trackAt(m, lt) : V.frame;
+    const sx = clamp(f.x * m.w - cw / 2, 0, m.w - cw), sy = clamp(f.y * m.h - ch / 2, 0, m.h - ch);
+    try { c.drawImage(src, sx, sy, cw, ch, 0, 0, W, H); } catch {}
+  }
+  const TR_NAMES = { cross: "Crossfade", dipb: "Dip to black", dipw: "Dip to white", wipe: "Wipe", slide: "Slide", zoom: "Zoom" };
+  const needsSnap = (type) => type === "cross" || type === "wipe" || type === "slide" || type === "zoom";
+  const snaps = new Map();
+  const snapKey = (prev, W, H) => `${prev.id}:${prev.mediaId}:${prev.out.toFixed(3)}:${prev.kb ? 1 : 0}:${W}x${H}:${V.follow ? 1 : 0}:${V.frame.x},${V.frame.y}`;
+  async function buildSnap(prev, W, H) {
+    const m = mediaOf(prev), lt = Math.max(prev.in, prev.out - 0.04), c = mk(W, H), x = c.getContext("2d");
+    x.fillStyle = "#000"; x.fillRect(0, 0, W, H);
+    let src;
+    if (m.kind === "synthetic") { m.draw(m.ctx, lt); src = m.canvas; }
+    else if (m.kind === "image") src = m.el;
+    else src = await frameOf(m, lt, m.w);
+    drawSrc(x, W, H, prev, m, src, lt);
+    return c;
+  }
+  let snapBusy = false;
+  async function ensureSnaps(W, H) {
+    if (snapBusy) return; snapBusy = true;
+    try {
+      for (let i = 1; i < V.clips.length; i++) {
+        const tr = V.trans[V.clips[i].id]; if (!tr || !needsSnap(tr.type)) continue;
+        const key = snapKey(V.clips[i - 1], W, H); if (!snaps.has(key)) snaps.set(key, await buildSnap(V.clips[i - 1], W, H));
+      }
+    } finally { snapBusy = false; }
+  }
+  function colorLUTs() {
+    const key = JSON.stringify([V.wheels, V.tone]);
+    if (colorLUTs.key === key) return colorLUTs.val;
+    const w = Tone.wheelLUTs(V.wheels), t = Tone.buildLUTs(V.tone); let val = null;
+    if (w || t) { val = {}; for (const ch of ["r", "g", "b"]) { const o = new Uint8ClampedArray(256); for (let v = 0; v < 256; v++) { const a = w ? w[ch][v] : v; o[v] = t ? t[ch][a] : a; } val[ch] = o; } }
+    colorLUTs.key = key; colorLUTs.val = val; return val;
+  }
   function renderFrame(c, W, H, t, o = {}) {
     c.save(); c.globalAlpha = 1; c.globalCompositeOperation = "source-over"; c.fillStyle = "#000"; c.fillRect(0, 0, W, H);
     const at = clipAt(t); if (!at) { c.restore(); return; }
-    const { clip, start } = at, m = mediaOf(clip), lt = clip.in + (t - start) * clip.speed;
+    const { clip, start, index } = at, m = mediaOf(clip), lt = clip.in + (t - start) * clip.speed;
     let src = m.el;
     if (m.kind === "synthetic") { m.draw(m.ctx, lt); src = m.canvas; }
-    const ar = W / H, mar = m.w / m.h; let cw, ch; if (mar > ar) { ch = m.h; cw = ch * ar; } else { cw = m.w; ch = cw / ar; }
-    const f = V.follow && m.track ? trackAt(m, lt) : V.frame;
-    const sx = clamp(f.x * m.w - cw / 2, 0, m.w - cw), sy = clamp(f.y * m.h - ch / 2, 0, m.h - ch);
     if (!o.before && V.adj.blur > 0) c.filter = `blur(${((V.adj.blur / 100) * Math.max(W, H) * 0.015).toFixed(1)}px)`;
-    try { c.drawImage(src, sx, sy, cw, ch, 0, 0, W, H); } catch {}
+    drawSrc(c, W, H, clip, m, src, lt);
     c.filter = "none";
-    if (!o.before && needsPixels()) { const img = c.getImageData(0, 0, W, H); processFrame(img, W, H, Math.round(t * FPS)); c.putImageData(img, 0, 0); }
+    // transition into this clip (blends with the previous clip's last frame)
+    const tr = index > 0 ? V.trans[clip.id] : null, tin = t - start;
+    let dip = 0, dipCol = "0,0,0";
+    if (tr && tin < tr.dur) {
+      const pIn = clamp(tin / tr.dur, 0, 1);
+      if (needsSnap(tr.type)) {
+        const snap = snaps.get(snapKey(V.clips[index - 1], W, H));
+        if (!snap) { ensureSnaps(W, H).then(() => { if (!P.playing) redrawSoon(); }); dip = 1 - pIn; }
+        else if (tr.type === "cross") { c.globalAlpha = 1 - pIn; c.drawImage(snap, 0, 0, W, H); c.globalAlpha = 1; }
+        else if (tr.type === "wipe") { c.save(); c.beginPath(); c.rect(pIn * W, 0, W, H); c.clip(); c.drawImage(snap, 0, 0, W, H); c.restore(); c.fillStyle = "rgba(255,255,255,.6)"; c.fillRect(pIn * W - 1, 0, 2, H); }
+        else if (tr.type === "slide") { const e = 1 - Math.pow(1 - pIn, 3), cur = mk(W, H); cur.getContext("2d").drawImage(c.canvas, 0, 0, W, H, 0, 0, W, H); c.fillStyle = "#000"; c.fillRect(0, 0, W, H); c.drawImage(snap, -e * W, 0, W, H); c.drawImage(cur, (1 - e) * W, 0, W, H); }
+        else if (tr.type === "zoom") { const z = 1 + pIn * 0.6; c.globalAlpha = 1 - pIn; c.drawImage(snap, (W - W * z) / 2, (H - H * z) / 2, W * z, H * z); c.globalAlpha = 1; }
+      } else { const half = tr.dur / 2; if (tin < half) { dip = 1 - tin / half; dipCol = tr.type === "dipw" ? "255,255,255" : "0,0,0"; } }
+    }
+    const nx = V.clips[index + 1], trOut = nx ? V.trans[nx.id] : null, toEnd = start + clipLen(clip) - t;
+    if (trOut && (trOut.type === "dipb" || trOut.type === "dipw") && toEnd < trOut.dur / 2) { dip = Math.max(dip, 1 - toEnd / (trOut.dur / 2)); dipCol = trOut.type === "dipw" ? "255,255,255" : "0,0,0"; }
+    const luts = o.before ? null : colorLUTs();
+    if (!o.before && (needsPixels() || luts)) { const img = c.getImageData(0, 0, W, H); if (needsPixels()) processFrame(img, W, H, Math.round(t * FPS)); if (luts) Tone.applyLUTs(img.data, luts); c.putImageData(img, 0, 0); }
+    if (dip > 0) { c.fillStyle = `rgba(${dipCol},${clamp(dip, 0, 1)})`; c.fillRect(0, 0, W, H); }
     if (!o.before && !o.noOverlays) for (const ov of V.overlays) { const e = ov.full ? total() : ov.end; if (t >= ov.start && t <= e) drawOverlay(c, W, H, ov, t - ov.start); }
     if (!o.before && !o.noOverlays) { const T = total(); let a = 0; if (V.fadeIn > 0 && t < V.fadeIn) a = 1 - t / V.fadeIn; if (V.fadeOut > 0 && t > T - V.fadeOut) a = Math.max(a, 1 - (T - t) / V.fadeOut); if (a > 0) { c.fillStyle = `rgba(0,0,0,${clamp(a, 0, 1)})`; c.fillRect(0, 0, W, H); } }
     c.restore();
   }
   let before = false;
+  let lastScope = 0;
   function draw() {
     if (EXP) { renderFrame(EXP.ctx, EXP.W, EXP.H, P.t); pctx.drawImage(EXP.canvas, 0, 0, PW, PH); }
     else renderFrame(pctx, PW, PH, P.t, { before });
+    if (!$("#vpane-color").hidden && performance.now() - lastScope > 180) { lastScope = performance.now(); Tone.drawScope($("#vScope"), view, $("#vScopeKind").value); }
   }
 
   /* ================= playback ================= */
@@ -349,12 +454,13 @@
     const at = clipAt(P.t);
     if (at) { const m = mediaOf(at.clip); if (m.kind === "video") { if (!m.el.paused) m.el.pause(); await seekEl(m.el, at.clip.in + (P.t - at.start) * at.clip.speed); } }
     if (my !== seekToken) return;
+    if (!P.playing) syncMusic(P.t, false);
     draw(); updateTime();
   }
   async function startClipAt(t) {
     const at = clipAt(t); P.clip = at.clip; P.clipStart = at.start;
     const m = mediaOf(at.clip);
-    for (const o of V.media) if (o !== m && o.el && !o.el.paused) o.el.pause();
+    for (const o of V.media) if (o !== m && o.kind === "video" && !o.el.paused) o.el.pause();
     if (m.kind === "video") { m.el.playbackRate = at.clip.speed; m.el.preservesPitch = true; await seekEl(m.el, at.clip.in + (t - at.start) * at.clip.speed); if (P.playing) await m.el.play().catch(() => {}); }
     P.t = t; P.last = performance.now();
   }
@@ -366,7 +472,7 @@
     await startClipAt(P.t);
     P.raf = requestAnimationFrame(loop);
   }
-  function pause() { P.playing = false; cancelAnimationFrame(P.raf); for (const m of V.media) if (m.el && !m.el.paused) m.el.pause(); setPlayBtn(); }
+  function pause() { P.playing = false; cancelAnimationFrame(P.raf); for (const m of V.media) if (m.el && m.el.pause && !m.el.paused) m.el.pause(); setPlayBtn(); }
   function loop(ts) {
     if (!P.playing) return;
     const clip = P.clip, m = mediaOf(clip), end = P.clipStart + clipLen(clip);
@@ -380,13 +486,18 @@
       startClipAt(end + 1e-4).then(() => { if (!P.playing) return; draw(); if (EXP?.rec?.state === "paused") EXP.rec.resume(); P.raf = requestAnimationFrame(loop); });
       return;
     }
-    P.t = Math.max(P.clipStart, t); draw(); updateTime(); if (EXP) updateExportProgress();
+    P.t = Math.max(P.clipStart, t); syncMusic(P.t, true); draw(); updateTime(); followHead(); if (EXP) updateExportProgress();
     P.raf = requestAnimationFrame(loop);
   }
   function setPlayBtn() { const b = $("#vPlay"); b.textContent = P.playing ? "Pause" : "Play"; b.setAttribute("aria-label", P.playing ? "Pause" : "Play"); }
   function updateTime() {
     const T = total(); $("#vTime").textContent = `${fmt(P.t)} / ${fmt(T)}`;
-    const tl = $("#vTimeline"); $("#vHead").style.left = (T ? (P.t / T) * tl.clientWidth : 0) + "px";
+    $("#vHead").style.left = (T ? (P.t / T) * $("#vTlInner").clientWidth : 0) + "px";
+  }
+  function followHead() {
+    if (tlZoom <= 1) return;
+    const tl = $("#vTimeline"), x = (P.t / Math.max(0.01, total())) * $("#vTlInner").clientWidth;
+    if (x < tl.scrollLeft + 20 || x > tl.scrollLeft + tl.clientWidth - 40) tl.scrollLeft = x - tl.clientWidth * 0.3;
   }
 
   /* ================= timeline editing ================= */
@@ -423,6 +534,7 @@
   async function frameOf(m, t, w) {
     const h = Math.round((w * m.h) / m.w), c = mk(w, h), x = c.getContext("2d", { willReadFrequently: true });
     if (m.kind === "synthetic") { m.draw(m.ctx, t); x.drawImage(m.canvas, 0, 0, w, h); }
+    else if (m.kind === "image") x.drawImage(m.el, 0, 0, w, h);
     else { const p = probeFor(m); if (p.readyState < 1) await new Promise((r) => { p.addEventListener("loadedmetadata", r, { once: true }); setTimeout(r, 3000); }); await seekEl(p, t); x.drawImage(p, 0, 0, w, h); }
     return c;
   }
@@ -471,8 +583,15 @@
     if (![...sel.options].some((o) => o.value === val)) sel.add(new Option((+V.ratio).toFixed(2) + ":1", val));
     sel.value = val;
   }
+  function waveCanvas(m, a, b, px) {
+    const A = m.audio; if (!A || A.none || !A.has || px < 8) return null;
+    const c = mk(Math.min(4000, px), 40), x = c.getContext("2d"); x.fillStyle = "rgba(255,255,255,.55)";
+    for (let i = 0; i < c.width; i++) { const t = a + ((b - a) * i) / c.width, w = Math.floor(t * A.rate); if (w < 0 || w >= A.db.length) continue; const v = clamp((A.db[w] + 60) / 60, 0, 1), h = Math.max(1, v * 38); x.fillRect(i, 20 - h / 2, 1, h); }
+    c.className = "wave"; return c;
+  }
   function renderTimeline() {
-    const tl = $("#vTimeline"), T = total(), W = tl.clientWidth, pps = W / Math.max(T, 0.1);
+    const tl = $("#vTimeline"), inner = $("#vTlInner"), T = total(), W = tl.clientWidth * tlZoom, pps = W / Math.max(T, 0.1);
+    inner.style.width = W + "px"; $("#vZoomV").textContent = Math.round(tlZoom * 100) + "%";
     const ruler = $("#vRuler"); ruler.innerHTML = "";
     const step = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300].find((s) => s * pps >= 56) || 600;
     for (let t = 0; t <= T + 1e-6; t += step) { const d = document.createElement("span"); d.style.left = t * pps + "px"; d.textContent = t >= 60 ? `${Math.floor(t / 60)}:${String(Math.round(t % 60)).padStart(2, "0")}` : `${+t.toFixed(1)}s`; ruler.append(d); }
@@ -484,6 +603,9 @@
       if (m.thumb) el.style.backgroundImage = `url(${m.thumb})`;
       el.title = `${m.name} · ${short(L)}${c.speed !== 1 ? " · " + c.speed + "×" : ""}`;
       const lab = document.createElement("span"); lab.textContent = `${m.name.replace(/^Sample: /, "")}${c.speed !== 1 ? " · " + c.speed + "×" : ""}`; el.append(lab);
+      const wv = m.kind === "video" ? waveCanvas(m, c.in, c.out, Math.round(L * pps)) : null; if (wv) el.append(wv);
+      const tr = V.trans[c.id]; if (tr && s > 0) { const tb = document.createElement("i"); tb.className = "trmark"; tb.title = `${TR_NAMES[tr.type]} · ${tr.dur} s`; tb.style.width = Math.max(6, tr.dur * pps) + "px"; el.append(tb); }
+      for (const side of ["l", "r"]) { const h = document.createElement("span"); h.className = "trim " + side; h.dataset.trim = side; h.dataset.clip = c.id; h.title = side === "l" ? "Drag to trim the start" : "Drag to trim the end"; el.append(h); }
       ch.append(el); s += L;
     }
     const oc = $("#vOvs"); oc.innerHTML = "";
@@ -495,6 +617,14 @@
       el.textContent = o.name; el.title = `${o.name} · ${fmt(o.start)}–${fmt(e)}`;
       oc.append(el);
     });
+    const mu = $("#vMus"); mu.innerHTML = "";
+    const mm = musicMedia();
+    if (mm) {
+      const a = V.music.start, b = Math.min(T, a + mm.duration), el = document.createElement("div"); el.className = "vmus";
+      el.style.left = a * pps + "px"; el.style.width = Math.max(4, (b - a) * pps - 2) + "px"; el.title = `${mm.name} · from ${fmt(a)}`;
+      const wv = waveCanvas(mm, 0, b - a, Math.round((b - a) * pps)); if (wv) el.append(wv);
+      const lab = document.createElement("span"); lab.textContent = "♪ " + mm.name + (V.music.duck ? " · ducks under speech" : ""); el.append(lab); mu.append(el);
+    } else { const e = document.createElement("span"); e.className = "ovempty"; e.textContent = "Music appears here (Edit › Music)"; mu.append(e); }
     updateTime();
   }
   function syncEdit() {
@@ -504,7 +634,10 @@
       const m = mediaOf(c); $("#vClipName").textContent = m.name;
       $("#vIn").value = c.in.toFixed(2); $("#vOut").value = c.out.toFixed(2); $("#vIn").max = $("#vOut").max = m.duration.toFixed(2);
       $("#vSpeed").value = String(c.speed); if (!$("#vSpeed").value) { $("#vSpeed").add(new Option(c.speed + "×", String(c.speed))); $("#vSpeed").value = String(c.speed); }
-      $("#vClipLen").textContent = `Plays for ${short(clipLen(c))} (source ${short(c.out - c.in)} of ${short(m.duration)})`;
+      $("#vClipLen").textContent = m.kind === "image" ? `Photo shown for ${short(clipLen(c))}` : `Plays for ${short(clipLen(c))} (source ${short(c.out - c.in)} of ${short(m.duration)})`;
+      $("#vKbRow").hidden = m.kind !== "image"; $("#vKb").checked = !!c.kb;
+      const idx = V.clips.indexOf(c), tr = V.trans[c.id];
+      $("#vTrRow").hidden = idx < 1; $("#vTrType").value = tr ? tr.type : "none"; $("#vTrDur").value = tr ? tr.dur : 0.8; $("#vTrDur").disabled = !tr;
     }
     const o = V.overlays.find((x) => x.id === V.selOv), ob = $("#vOvBox");
     ob.hidden = !o;
@@ -515,12 +648,14 @@
     $("#vFadeIn").value = V.fadeIn; $("#vFadeOut").value = V.fadeOut;
     for (const k of ["level", "hum", "voice", "bass"]) $("#vSfx-" + k).checked = !!V.sfx[k];
     soundInfo();
+    const mm = musicMedia(); $("#vMusBox").hidden = !mm; $("#vMusAdd").textContent = mm ? "Replace music" : "Add music";
+    if (mm) { $("#vMusName").textContent = mm.name + " · " + fmt(mm.duration); $("#vMusVol").value = Math.round(V.music.vol * 100); $("#vMusVolV").textContent = Math.round(V.music.vol * 100) + "%"; $("#vMusStart").value = V.music.start; $("#vMusDuck").checked = V.music.duck; }
   }
   function syncAdj() {
     for (const k of Object.keys(DEF)) { const inp = $("#vadj-" + k), out = $("#vadjv-" + k); if (!inp) continue; inp.value = V.adj[k] || 0; out.textContent = FE.fmtAdj(k, V.adj[k] || 0); out.classList.toggle("on", !!V.adj[k]); }
     $("#vGrade").checked = V.grade > 0;
   }
-  function refreshAll() { renderTimeline(); syncEdit(); syncAdj(); updUndo(); $("#vEmpty").hidden = V.clips.length > 0; }
+  function refreshAll() { renderTimeline(); syncEdit(); syncAdj(); updUndo(); $("#vEmpty").hidden = V.clips.length > 0; if (!$("#vpane-color").hidden) { wheelsUI.draw(); vToneUI.draw(); } }
   function redrawSoon() { if (!P.playing) { draw(); updateTime(); } }
 
   /* ================= UI: controls ================= */
@@ -543,16 +678,34 @@
 
   // timeline pointer
   const tlEl = $("#vTimeline"); let scrubbing = false;
-  const tAtX = (x) => { const r = tlEl.getBoundingClientRect(); return clamp(((x - r.left) / r.width) * total(), 0, total()); };
+  const tAtX = (x) => { const r = $("#vTlInner").getBoundingClientRect(); return clamp(((x - r.left) / r.width) * total(), 0, total()); };
+  let trimDrag = null;
   tlEl.addEventListener("pointerdown", (e) => {
     if (!V.clips.length) return;
+    const th = e.target.closest(".trim");
+    if (th) {
+      const c = V.clips.find((x) => x.id === +th.dataset.clip); if (!c) return;
+      e.preventDefault(); pause(); pushUndo(); V.sel = c.id; V.selOv = null;
+      trimDrag = { c, side: th.dataset.trim, x0: e.clientX, in0: c.in, out0: c.out, pps: $("#vTlInner").clientWidth / Math.max(0.1, total()) };
+      tlEl.setPointerCapture(e.pointerId); return;
+    }
     const clipEl = e.target.closest(".vclip"), ovEl = e.target.closest(".vov");
     if (clipEl) { V.sel = +clipEl.dataset.clip; V.selOv = null; switchTab("edit"); }
     else if (ovEl) { V.selOv = +ovEl.dataset.ov; switchTab("edit"); }
     pause(); scrubbing = true; tlEl.setPointerCapture(e.pointerId); seek(tAtX(e.clientX)); renderTimeline(); syncEdit();
   });
-  tlEl.addEventListener("pointermove", (e) => { if (scrubbing) seek(tAtX(e.clientX)); });
-  for (const ev of ["pointerup", "pointercancel"]) tlEl.addEventListener(ev, () => (scrubbing = false));
+  tlEl.addEventListener("pointermove", (e) => {
+    if (trimDrag) {
+      const d = ((e.clientX - trimDrag.x0) / trimDrag.pps) * trimDrag.c.speed, c = trimDrag.c, m = mediaOf(c);
+      if (trimDrag.side === "l") c.in = clamp(trimDrag.in0 + d, 0, c.out - 0.1); else c.out = clamp(trimDrag.out0 + d, c.in + 0.1, m.duration);
+      renderTimeline(); seek(trimDrag.side === "l" ? startOf(c) : Math.max(0, startOf(c) + clipLen(c) - 0.02)); return;
+    }
+    if (scrubbing) seek(tAtX(e.clientX));
+  });
+  for (const ev of ["pointerup", "pointercancel"]) tlEl.addEventListener(ev, () => { scrubbing = false; if (trimDrag) { trimDrag = null; refreshAll(); } });
+  function setTlZoom(z) { tlZoom = clamp(z, 1, 24); renderTimeline(); followHead(); }
+  $("#vZoomIn").onclick = () => setTlZoom(tlZoom * 1.6); $("#vZoomOut").onclick = () => setTlZoom(tlZoom / 1.6);
+  tlEl.addEventListener("wheel", (e) => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); setTlZoom(tlZoom * (e.deltaY < 0 ? 1.25 : 0.8)); }, { passive: false });
 
   // edit tab
   const selClip = () => V.clips.find((x) => x.id === V.sel);
@@ -562,6 +715,23 @@
   $("#vSetIn").onclick = () => { const at = clipAt(P.t); if (!at) return; pushUndo(); const c = at.clip; V.sel = c.id; c.in = clamp(c.in + (P.t - at.start) * c.speed, 0, c.out - 0.05); refreshAll(); seek(startOf(c)); };
   $("#vSetOut").onclick = () => { const at = clipAt(P.t); if (!at) return; pushUndo(); const c = at.clip; V.sel = c.id; c.out = clamp(c.in + (P.t - at.start) * c.speed, c.in + 0.05, mediaOf(c).duration); refreshAll(); seek(Math.min(P.t, total())); };
   $("#vSpeed").onchange = () => { const c = selClip(); if (!c) return; pushUndo(); c.speed = +$("#vSpeed").value; refreshAll(); seek(Math.min(P.t, total())); };
+  $("#vKb").onchange = () => { const c = selClip(); if (!c) return; pushUndo(); c.kb = $("#vKb").checked; redrawSoon(); };
+  $("#vTrType").onchange = () => { const c = selClip(); if (!c) return; pushUndo(); const v = $("#vTrType").value; if (v === "none") delete V.trans[c.id]; else V.trans[c.id] = { type: v, dur: clamp(+$("#vTrDur").value || 0.8, 0.2, Math.min(3, clipLen(c) - 0.05)) }; refreshAll(); seek(startOf(c) + 0.05); };
+  $("#vTrDur").onchange = () => { const c = selClip(); if (!c || !V.trans[c.id]) return; pushUndo(); V.trans[c.id].dur = clamp(+$("#vTrDur").value || 0.8, 0.2, Math.min(3, clipLen(c) - 0.05)); refreshAll(); redrawSoon(); };
+  $("#vTrAll").onclick = () => { if (V.clips.length < 2) return FE.toast("Add or split clips first: transitions go between clips"); pushUndo(); const type = $("#vTrType").value !== "none" ? $("#vTrType").value : "cross"; const n = setAllTransitions(type, +$("#vTrDur").value || 0.8); refreshAll(); redrawSoon(); FE.toast(`${TR_NAMES[type]} added to ${n} cut${n > 1 ? "s" : ""}`); };
+  function setAllTransitions(type, dur) { let n = 0; V.clips.forEach((c, i) => { if (i > 0) { V.trans[c.id] = { type, dur: clamp(dur, 0.2, Math.min(3, clipLen(c) - 0.05, clipLen(V.clips[i - 1]) - 0.05)) }; n++; } }); return n; }
+  $("#vMusAdd").onclick = () => $("#vMusFile").click();
+  $("#vMusFile").onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    busy(true, "Loading music…");
+    try { const m = await loadAudioFile(f); V.media.push(m); pushUndo(); V.music = { mediaId: m.id, start: 0, vol: 0.6, duck: true }; ensureAudio(); connectMusic(m); await analyzeAudio(m); await analyzeAllAudio(); FE.toast(`Added “${m.name}” as music`); }
+    catch (err) { FE.toast(err.message); }
+    busy(false); refreshAll();
+  };
+  $("#vMusVol").addEventListener("input", () => { if (!V.music) return; V.music.vol = $("#vMusVol").value / 100; $("#vMusVolV").textContent = $("#vMusVol").value + "%"; syncMusic(P.t, P.playing); });
+  $("#vMusStart").onchange = () => { if (!V.music) return; pushUndo(); V.music.start = clamp(+$("#vMusStart").value || 0, 0, total()); refreshAll(); syncMusic(P.t, P.playing); };
+  $("#vMusDuck").onchange = async () => { if (!V.music) return; pushUndo(); V.music.duck = $("#vMusDuck").checked; if (V.music.duck) { busy(true, "Listening for speech…"); await analyzeAllAudio(); busy(false); } refreshAll(); };
+  $("#vMusDel").onclick = () => { if (!V.music) return; pushUndo(); const m = musicMedia(); if (m) m.el.pause(); V.music = null; refreshAll(); };
   $("#vMoveL").onclick = () => moveClip(-1); $("#vMoveR").onclick = () => moveClip(1);
   function moveClip(dir) { const i = V.clips.findIndex((x) => x.id === V.sel), j = i + dir; if (i < 0 || j < 0 || j >= V.clips.length) return; pushUndo(); [V.clips[i], V.clips[j]] = [V.clips[j], V.clips[i]]; refreshAll(); seek(startOf(V.clips[j])); }
   $("#vDup").onclick = () => { const i = V.clips.findIndex((x) => x.id === V.sel); if (i < 0) return; pushUndo(); const c = { ...V.clips[i], id: uid++ }; V.clips.splice(i + 1, 0, c); V.sel = c.id; refreshAll(); redrawSoon(); };
@@ -645,7 +815,13 @@
   })();
 
   // tabs
-  function switchTab(name) { $$("#vTabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.vtab === name))); for (const t of ["ai", "adjust", "edit", "export"]) $("#vpane-" + t).hidden = t !== name; }
+  function switchTab(name) { $$("#vTabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.vtab === name))); for (const t of ["ai", "color", "adjust", "edit", "export"]) $("#vpane-" + t).hidden = t !== name; if (name === "color") { wheelsUI.draw(); vToneUI.draw(); lastScope = 0; redrawSoon(); } }
+  let colorEdit = 0;
+  const colorBegin = () => { if (Date.now() - colorEdit > 900) pushUndo(); colorEdit = Date.now(); };
+  const wheelsUI = Tone.mountWheels($("#vWheels"), { get: () => JSON.parse(JSON.stringify(V.wheels)), set: (w) => { V.wheels = w; redrawSoon(); }, begin: colorBegin });
+  const vToneUI = Tone.mountToneEditor($("#vCurves"), { get: () => Tone.cloneTone(V.tone), set: (t) => { colorBegin(); V.tone = t; redrawSoon(); }, histogram: () => Tone.histogram(view) });
+  $("#vScopeKind").onchange = () => { lastScope = 0; redrawSoon(); };
+  $("#vColorReset").onclick = () => { pushUndo(); V.wheels = Tone.defaultWheels(); V.tone = Tone.defaultTone(); wheelsUI.draw(); vToneUI.draw(); redrawSoon(); };
   $$("#vTabs button").forEach((b) => (b.onclick = () => switchTab(b.dataset.vtab)));
 
   /* ================= export ================= */
@@ -664,13 +840,14 @@
   $("#vExportBtn").onclick = () => { switchTab("export"); exportInfo(); };
   $("#vExport").onclick = startExport;
   $("#vCancel").onclick = () => { if (!EXP) return; EXP.cancelled = true; pause(); try { EXP.rec.stop(); } catch {} };
-  function startExport() {
+  async function startExport() {
     const mime = pickMime(); if (!mime || EXP) return;
     const [W, H] = dims(+$("#vRes").value), canvas = mk(W, H);
+    if (Object.keys(V.trans).length) { busy(true, "Preparing transitions…"); await ensureSnaps(W, H); busy(false); }
     if (!canvas.captureStream) { FE.toast("This browser can't record video from the editor"); return; }
     pause(); ensureAudio();
     const stream = canvas.captureStream(FPS);
-    const hasVideoAudio = !V.muted && usedMedia().some((m) => m.kind === "video");
+    const hasVideoAudio = (!V.muted && usedMedia().some((m) => m.kind === "video")) || !!musicMedia();
     if (hasVideoAudio && recDest) recDest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
     const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: Math.round(W * H * FPS * 0.12) });
     const chunks = [];
@@ -739,6 +916,9 @@
         rebuildAll();
         if (!hasSound()) soundNote = true;
       }
+      else if (op.op === "transitions") { if (V.clips.length < 2) extra.push("didn't add transitions because there's only one clip (split it or add more clips first)"); else { const n = setAllTransitions(op.type, op.dur || 0.8); extra.push(`added a ${TR_NAMES[op.type].toLowerCase()} to ${n === 1 ? "the cut" : `all ${n} cuts`}`); } }
+      else if (op.op === "duck") { if (!musicMedia()) extra.push("couldn't duck the music because there's no music yet (Edit › Music › Add music)"); else { V.music.duck = true; await analyzeAllAudio(); extra.push("set the music to dip whenever someone speaks"); } }
+      else if (op.op === "kenburns") { const imgs = V.clips.filter((c) => mediaOf(c).kind === "image"); imgs.forEach((c) => (c.kb = true)); extra.push(imgs.length ? `added a slow zoom to ${imgs.length} photo${imgs.length > 1 ? "s" : ""}` : "found no photos on the timeline to zoom (add photos with Add video)"); }
       else if (op.op === "volume") { V.volume = clamp(Math.round((V.volume + op.d) * 100) / 100, 0, 2); V.muted = false; applyVolume(); extra.push(`set the volume to ${Math.round(V.volume * 100)}%`); }
     }
     for (const job of plan.jobs) {

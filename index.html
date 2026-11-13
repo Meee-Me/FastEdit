@@ -186,6 +186,18 @@ body.mode-video .vpanel { grid-area: panel; display: flex; }
 .ruler span { position: absolute; top: 3px; font-family: var(--font-mono); font-size: 10px; color: var(--muted); padding-left: 3px; border-left: 1px solid var(--line); height: 14px; line-height: 14px; }
 .track { position: relative; height: 58px; margin-top: 6px; }
 .ovtrack { height: 28px; margin-top: 4px; }
+.mustrack { height: 24px; margin-top: 4px; }
+.tl-inner { position: relative; min-width: 100%; height: 100%; }
+.timeline { overflow-x: auto; overflow-y: hidden; height: 150px; }
+.vclip .wave { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 42%; opacity: .7; pointer-events: none; mix-blend-mode: screen; }
+.vclip .trim { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; background: rgba(240,164,58,0); z-index: 2; }
+.vclip .trim.l { left: 0; border-left: 3px solid transparent; } .vclip .trim.r { right: 0; border-right: 3px solid transparent; }
+.vclip:hover .trim, .vclip.sel .trim { background: rgba(240,164,58,.25); }
+.vclip:hover .trim.l, .vclip.sel .trim.l { border-left-color: var(--accent); } .vclip:hover .trim.r, .vclip.sel .trim.r { border-right-color: var(--accent); }
+.vclip .trmark { position: absolute; left: 0; top: 0; height: 10px; background: linear-gradient(90deg, rgba(255,255,255,.9), rgba(255,255,255,0)); border-radius: 0 0 6px 0; pointer-events: none; }
+.vmus { position: absolute; top: 0; height: 100%; border-radius: 5px; background: #3b5bdb; overflow: hidden; }
+.vmus .wave { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .45; }
+.vmus span { position: relative; font-size: 10px; line-height: 24px; padding: 0 6px; color: #fff; white-space: nowrap; }
 .vclip { position: absolute; top: 0; height: 100%; border: 1px solid #4a5160; border-radius: 6px; background-color: var(--panel-2); background-size: auto 100%; background-repeat: repeat-x; padding: 0; overflow: hidden; text-align: left; }
 .vclip span { position: absolute; left: 4px; bottom: 3px; right: 4px; font-size: 11px; background: rgba(10,11,13,.72); padding: 1px 5px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: fit-content; }
 .vclip.sel { border: 2px solid var(--accent); }
@@ -459,7 +471,7 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
   <section class="vstage" id="vStage" aria-label="Video editor">
     <div class="opts vbar">
       <button class="btn" id="vOpen">Add video</button>
-      <input type="file" id="vFile" accept="video/*,.mp4,.mov,.webm,.m4v" multiple hidden>
+      <input type="file" id="vFile" accept="video/*,image/*,.mp4,.mov,.webm,.m4v" multiple hidden>
       <button class="btn ghost" id="vUndo" title="Undo (Ctrl+Z)">Undo</button>
       <button class="btn ghost" id="vRedo" title="Redo (Ctrl+Shift+Z)">Redo</button>
       <span class="docinfo" id="vInfo"></span>
@@ -481,18 +493,23 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
       <span class="tc" id="vTime">00:00.00 / 00:00.00</span>
       <div class="spacer"></div>
       <button class="btn sm" id="vSplit" title="Split the clip at the playhead (S)">Split at playhead</button>
+      <div class="grp" aria-label="Timeline zoom"><button class="btn ghost sm" id="vZoomOut" aria-label="Zoom timeline out">−</button><span class="docinfo" id="vZoomV">100%</span><button class="btn ghost sm" id="vZoomIn" aria-label="Zoom timeline in">+</button></div>
     </div>
     <div class="timeline" id="vTimeline">
-      <div class="ruler" id="vRuler"></div>
-      <div class="track" id="vClips"></div>
-      <div class="track ovtrack" id="vOvs"></div>
-      <div class="playhead" id="vHead"></div>
+      <div class="tl-inner" id="vTlInner">
+        <div class="ruler" id="vRuler"></div>
+        <div class="track" id="vClips"></div>
+        <div class="track ovtrack" id="vOvs"></div>
+        <div class="track mustrack" id="vMus"></div>
+        <div class="playhead" id="vHead"></div>
+      </div>
     </div>
   </section>
 
   <aside class="panel vpanel" id="vPanel">
     <div class="tabs" role="tablist" id="vTabs">
       <button role="tab" aria-selected="true" data-vtab="ai">AI</button>
+      <button role="tab" aria-selected="false" data-vtab="color">Color</button>
       <button role="tab" aria-selected="false" data-vtab="adjust">Adjust</button>
       <button role="tab" aria-selected="false" data-vtab="edit">Edit</button>
       <button role="tab" aria-selected="false" data-vtab="export">Export</button>
@@ -500,6 +517,16 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
 
     <div class="tabpane chat-pane" id="vpane-ai">
       <div id="videoChat"></div>
+    </div>
+
+    <div class="tabpane" id="vpane-color" hidden>
+      <div class="tone-head"><div class="label">Scopes</div><select id="vScopeKind" aria-label="Scope"><option value="waveform">Waveform</option><option value="vectorscope">Vectorscope</option><option value="histogram">Histogram</option></select></div>
+      <canvas class="scope" id="vScope" width="520" height="260" aria-label="Live video scope"></canvas>
+      <div class="label">Color wheels</div>
+      <div id="vWheels"></div>
+      <p class="hint">Drag inside a wheel to tint shadows, midtones or highlights; the slider brightens or darkens that range. Double-click a wheel to reset it.</p>
+      <div id="vCurves" class="tone-box"></div>
+      <button class="btn" id="vColorReset">Reset color grade</button>
     </div>
 
     <div class="tabpane" id="vpane-adjust" hidden>
@@ -520,11 +547,29 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
           <div class="field2"><label for="vIn">Start (s)</label><input id="vIn" type="number" step="0.01" min="0"></div>
           <div class="field2"><label for="vOut">End (s)</label><input id="vOut" type="number" step="0.01" min="0"></div>
           <div class="btnrow"><button class="btn sm" id="vSetIn">Start at playhead</button><button class="btn sm" id="vSetOut">End at playhead</button></div>
+          <label class="check" id="vKbRow" hidden><input type="checkbox" id="vKb"> Slow zoom (pan and zoom the photo)</label>
+          <div id="vTrRow" class="vgrid" hidden>
+            <div class="field2"><label for="vTrType">Transition in</label><select id="vTrType"><option value="none">None (cut)</option><option value="cross">Crossfade</option><option value="dipb">Dip to black</option><option value="dipw">Dip to white</option><option value="wipe">Wipe</option><option value="slide">Slide</option><option value="zoom">Zoom</option></select></div>
+            <div class="field2"><label for="vTrDur">Length (s)</label><input id="vTrDur" type="number" min="0.2" max="3" step="0.1" value="0.8"></div>
+          </div>
           <div class="field2"><label for="vSpeed">Speed</label><select id="vSpeed"><option value="0.25">0.25× (slow motion)</option><option value="0.5">0.5× (slow motion)</option><option value="0.75">0.75×</option><option value="1">1× (normal)</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="3">3×</option><option value="4">4× (timelapse)</option></select></div>
           <p class="hint" id="vClipLen"></p>
           <div class="btnrow"><button class="btn sm" id="vMoveL">Move earlier</button><button class="btn sm" id="vMoveR">Move later</button><button class="btn sm" id="vDup">Duplicate</button><button class="btn sm danger" id="vDel">Delete</button></div>
         </div>
-        <button class="btn sm" id="vScenes">Split at scene changes</button>
+        <div class="btnrow"><button class="btn sm" id="vScenes">Split at scene changes</button><button class="btn sm" id="vTrAll">Transition on every cut</button></div>
+      </section>
+      <section class="vsec">
+        <div class="label">Music</div>
+        <button class="btn sm" id="vMusAdd">Add music</button>
+        <input type="file" id="vMusFile" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg" hidden>
+        <div id="vMusBox" class="vgrid" hidden>
+          <b id="vMusName" class="vname"></b>
+          <div class="field2"><label for="vMusVol">Volume</label><input type="range" id="vMusVol" min="0" max="150" value="60"><output id="vMusVolV" class="docinfo">60%</output></div>
+          <div class="field2"><label for="vMusStart">Starts at (s)</label><input id="vMusStart" type="number" min="0" step="0.1" value="0"></div>
+          <label class="check"><input type="checkbox" id="vMusDuck" checked> Lower the music when people talk</label>
+          <button class="btn sm danger" id="vMusDel">Remove music</button>
+        </div>
+        <p class="hint">Music fades out at the end and is included when you export.</p>
       </section>
       <section class="vsec">
         <div class="label">Shorten</div>

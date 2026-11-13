@@ -8,7 +8,7 @@ Everything lives in [`fastai.js`](fastai.js), with no libraries or outside servi
 
 | Part | What it does |
 | --- | --- |
-| **Language model** | A neural network written by hand: hashed word, word-pair and letter-trigram features → 48 tanh units → softmax over 68 editing skills (photo, video and sound) (about 100k parameters). It trains in the browser on page load from about 3,800 generated phrases and takes a couple of seconds. The letter trigrams let it handle typos ("remove the backround", "add vigentte"). A request is split into clauses ("warmer, crop to 4:5 and add stars"), and each clause is classified with a confidence score. Requests it doesn't recognize are rejected rather than guessed at. |
+| **Language model** | A neural network written by hand: hashed word, word-pair and letter-trigram features → 48 tanh units → softmax over 81 skills (photo, video, sound and conversation) (about 100k parameters). It trains in the browser on page load from about 4,600 generated phrases and takes a couple of seconds. The letter trigrams let it handle typos ("remove the backround", "add vigentte"). A request is split into clauses ("warmer, crop to 4:5 and add stars"), and each clause is classified with a confidence score. Requests it doesn't recognize are rejected rather than guessed at. |
 | **Vision** | Measures exposure percentiles, contrast, clipping, gray-world color cast and colorfulness. It also finds a k-means color palette, a frequency-tuned saliency map (where the eye goes), the brightest light source, the horizon and the sky. |
 | **Planner** | Turns intents plus analysis into edits: histogram-based auto-enhance, white balance, smart crops that put the subject on a rule-of-thirds line, ratio crops, rotate/flip, and background removal (a border color model + flood fill + largest-component mask). |
 | **Generators** | Procedural layers placed using the analysis: captions (with auto-generated titles), frames (clean, polaroid, film, hand-drawn), stars, birds, moon, clouds/fog, sparkles, lens flare, glow, light leak, snow, rain, bokeh, confetti, hearts, retro sun/stripes, and a teal-and-orange grade. |
@@ -49,6 +49,11 @@ Switch to **Video** at the top. Everything runs on your device in [`video.js`](v
   - **Even out loudness** compresses peaks and sets a steady level from the measured loudness.
   - **Reduce hum and rumble** detects 50 or 60 Hz mains hum and notches it and its harmonics out, plus a low cut.
   - **Clearer voices** (presence EQ) and **bass boost**.
+- **Color tab**: lift / gamma / gain color wheels, master and per-channel curves, and live waveform, vectorscope and histogram scopes.
+- **Transitions** between clips: crossfade, dip to black or white, wipe, slide and zoom, per cut or on every cut.
+- **Music track**: add an MP3, WAV or M4A, set its volume and start, and let it **duck** automatically whenever someone speaks. It fades out at the end and is included in exports.
+- **Photos as clips**, shown for 4 seconds by default, with an optional slow zoom.
+- **Timeline**: zoom in and out (Ctrl + scroll), drag clip edges to trim, and see each clip's sound as a waveform.
 - **Smart shortening:** "make it 15 seconds" keeps the moments with the most movement, sound and color, in order. "Keep the first 10 seconds" or "keep 3 to 8 seconds" still cut exactly.
 - **Scene detection:** finds hard cuts by comparing frames and splits the timeline there.
 - **Fast Edit AI:** understands requests like "trim the first 2 seconds, slow motion and fade in", "cinematic and vertical for TikTok", "split at scene changes", "speed up 2x and mute", or "falling snow and a caption that says “Winter”".
