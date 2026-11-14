@@ -127,7 +127,7 @@
     for (const g of (info.genres || []).map((x) => x.toLowerCase())) for (const [re, query, mood, label] of STYLES) if (re.test(g)) return { query, mood, label };
     return { query: "upbeat pop", mood: "upbeat", label: "Pop" };
   }
-  let lastSpot = null;
+  let lastSpot = null, currentMusic = null; const usedMusic = new Set();
   async function spotifyInfo(link) {
     let r;
     try { r = await fetch(`/api/spotify?url=${encodeURIComponent(link)}`); } catch { throw new Error("Couldn't reach Fast Edit's helper. Check your connection."); }
@@ -164,7 +164,7 @@
   async function useMusic(item) {
     toVideo(); toast(`Downloading “${item.title}”…`);
     const file = await download("audio", item); const m = await window.FEVideo.addMusicFile(file); if (!m) throw new Error("That file couldn't be played.");
-    dropMusicCredits(); addCredit(item, "music"); return m;
+    dropMusicCredits(); addCredit(item, "music"); currentMusic = item.id; usedMusic.add(item.id); return m;
   }
   async function useSound(item) { toVideo(); toast(`Downloading “${item.title}”…`); const file = await download("audio", item); await window.FEVideo.addSoundFile(file); addCredit(item, "sound"); }
   async function usePhoto(item) {
@@ -177,7 +177,7 @@
     const len = Math.max(15, Math.min(240, seconds || (window.FEVideo.total() || 30) + 1));
     toast("Composing…");
     const r = await FastComposer.composeFile({ mood, seconds: len });
-    await window.FEVideo.addMusicFile(r.file); dropMusicCredits();
+    await window.FEVideo.addMusicFile(r.file); dropMusicCredits(); currentMusic = null;
     return r;
   }
 
@@ -346,9 +346,17 @@
       lastMusicQuery = q; if (!again) triedMusic = new Set();
       const need = (window.FEVideo.total() || 20) * 1000;
       let results;
-      try { results = (await search("audio", q, { kind: "music", commercial: true })).filter((r) => !triedMusic.has(r.id)); }
+      try {
+        results = await search("audio", q, { kind: "music", commercial: true });
+        for (const w of q.split(/\s+/)) { if (results.length >= 3 || !q.includes(" ")) break; results = results.concat(await search("audio", w, { kind: "music", commercial: true })); } // fewer words when a combined search finds little
+        results = results.filter((r, i, a) => !triedMusic.has(r.id) && a.findIndex((x) => x.id === r.id) === i);
+      }
       catch (e) { const r = await useOriginal(words[0] && FastComposer.MOODS[words[0]] ? words[0] : mood); return { text: `${intro}I couldn't reach the music library (${e.message}), so I composed an original ${r.moodName.toLowerCase()} track instead, “${r.title}”. It's yours to use anywhere, no credit needed.`, chips: ["Compose another", "Try finding a song again"] }; }
-      results.sort((a, b) => Math.abs((a.duration || 0) - need * 1.2) - Math.abs((b.duration || 0) - need * 1.2));
+      if (window.FEVideo && !window.FEVideo.V.music) currentMusic = null;
+      results = results.filter((r) => r.id !== currentMusic);
+      // best length fit first, songs you haven't had yet before ones you have, with a little variety
+      const fit = (r) => Math.abs((r.duration || 0) - need * 1.2) / 1000 + (usedMusic.has(r.id) ? 1e6 : 0) + Math.random() * 40;
+      results.sort((a, b) => fit(a) - fit(b));
       let lastErr = null;
       for (const it of results.slice(0, 4)) {
         triedMusic.add(it.id);
@@ -369,6 +377,18 @@
       const intro = `That's ${spotLine(d)}, ${d.style.label.toLowerCase()}${d.genres.length ? ` (${d.genres.slice(0, 3).join(", ")})` : ""}. Spotify songs can only be played in Spotify, not put into videos, so here's free music in a similar style.\n\n`;
       const r = await ai.findMusic({ query: d.style.query, mood: d.style.mood, intro });
       return { ...r, embed: d.embed, chips: ["Find a different one", "Compose one in this style", "Add credits to the end"] };
+    },
+    async removeMusic({ text = "" } = {}) {
+      toVideo();
+      const had = window.FEVideo.removeMusic(); if (had) { dropMusicCredits(); currentMusic = null; }
+      const m = text.match(/\b(?:replace|swap|change)\b[^.]*?\bwith\b\s*(.*)$/i) || text.match(/\b(?:and|then)\s+(?:add|use|put)\s+(.*)$/i);
+      const what = m ? m[1].replace(/[.!?]+$/, "").trim() : null;
+      if (what && SPOTIFY_RE.test(what)) return ai.spotifyLike({ text: what });
+      if (what && /\b(compose|original|your own)\b/i.test(what)) return ai.composeMusic({ text: what });
+      if (what && what.split(/\s+/).length >= 1 && !/^(it|that|this|something|one)$/i.test(what)) return ai.findMusic({ text: what + " music" });
+      if (/\b(change|swap|replace|different|another)\b/i.test(text) && !/\bwith\s*$/i.test(text)) return ai.findMusic({ text: text.replace(/\bchange|swap|replace\b/gi, ""), again: true });
+      return { text: had ? "I removed the music. What should I replace it with? Paste a Spotify link and I'll find something that sounds similar, or tell me a style." : "There's no music on the video right now. Want me to add some?",
+        chips: ["Find upbeat music", "Find chill music", "Compose original music"] };
     },
     async composeMusic({ text = "" } = {}) {
       const w = (text.match(MOOD_WORDS) || []).map((x) => x.toLowerCase().replace("lo-fi", "chill").replace("lofi", "chill"));

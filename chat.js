@@ -101,9 +101,9 @@
         case "make_poster": return await cfg.makePoster(r.topic, text);
         case "make_thumbnail": return await cfg.makeThumbnail(r.topic, text);
         case "auto_edit": return await cfg.autoEdit(r.topic, r.secs, text);
-        case "spotify_like": case "find_music": case "compose_music": case "find_photo": case "find_sound": case "open_market": case "add_credits": {
+        case "spotify_like": case "remove_music": case "find_music": case "compose_music": case "find_photo": case "find_sound": case "open_market": case "add_credits": {
           const M = window.FEMarket; if (!M) return { text: "The Marketplace isn't loaded yet. Try again in a moment." };
-          const fn = { spotify_like: "spotifyLike", find_music: "findMusic", compose_music: "composeMusic", find_photo: "findPhoto", find_sound: "findSound", open_market: "openMarket", add_credits: "addCredits" }[r.kind];
+          const fn = { spotify_like: "spotifyLike", remove_music: "removeMusic", find_music: "findMusic", compose_music: "composeMusic", find_photo: "findPhoto", find_sound: "findSound", open_market: "openMarket", add_credits: "addCredits" }[r.kind];
           try { return await M.ai[fn]({ text, again: r.again }); } catch (e) { console.error(e); return { text: "That didn't work: " + (e && e.message ? e.message : "unknown error") + "." }; }
         }
         default: {

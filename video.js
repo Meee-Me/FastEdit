@@ -816,7 +816,8 @@
   $("#vMusVol").addEventListener("input", () => { if (!V.music) return; V.music.vol = $("#vMusVol").value / 100; $("#vMusVolV").textContent = $("#vMusVol").value + "%"; syncMusic(P.t, P.playing); });
   $("#vMusStart").onchange = () => { if (!V.music) return; pushUndo(); V.music.start = clamp(+$("#vMusStart").value || 0, 0, total()); refreshAll(); syncMusic(P.t, P.playing); };
   $("#vMusDuck").onchange = async () => { if (!V.music) return; pushUndo(); V.music.duck = $("#vMusDuck").checked; if (V.music.duck) { busy(true, "Listening for speech…"); await analyzeAllAudio(); busy(false); } refreshAll(); };
-  $("#vMusDel").onclick = () => { if (!V.music) return; pushUndo(); const m = musicMedia(); if (m) m.el.pause(); V.music = null; refreshAll(); };
+  function removeMusic() { if (!V.music) return false; pushUndo(); const m = musicMedia(); if (m) m.el.pause(); V.music = null; refreshAll(); return true; }
+  $("#vMusDel").onclick = () => removeMusic();
   $("#vMoveL").onclick = () => moveClip(-1); $("#vMoveR").onclick = () => moveClip(1);
   function moveClip(dir) { const i = V.clips.findIndex((x) => x.id === V.sel), j = i + dir; if (i < 0 || j < 0 || j >= V.clips.length) return; pushUndo(); [V.clips[i], V.clips[j]] = [V.clips[j], V.clips[i]]; refreshAll(); seek(startOf(V.clips[j])); }
   $("#vDup").onclick = () => { const i = V.clips.findIndex((x) => x.id === V.sel); if (i < 0) return; pushUndo(); const c = { ...V.clips[i], id: uid++ }; V.clips.splice(i + 1, 0, c); V.sel = c.id; refreshAll(); redrawSoon(); };
@@ -1423,7 +1424,7 @@
   }
   function frameAnalysis() { if (!V.clips.length) return null; const c = mk(PW, PH); renderFrame(c.getContext("2d"), PW, PH, Math.min(P.t, total() - 0.05), { noOverlays: true }); return AI.analyze(c); }
   function addCreditsOverlay(text) { if (!V.clips.length) return; pushUndo(); const T = total(), st = Math.max(0, T - 4); addOverlay({ kind: "text", text, clause: "bottom sans", k: 0.55, color: null }, frameAnalysis(), { start: st, end: T }); refreshAll(); redrawSoon(); }
-  window.FEVideo = { V, seek, total, play, pause, addFiles, makeVideo, makeThumbnail, autoEdit, addMusicFile, addSoundFile, frameAnalysis, addCreditsOverlay, realClips, switchTab, get time() { return P.t; }, get exporting() { return !!EXP; },
+  window.FEVideo = { V, seek, total, play, pause, addFiles, makeVideo, makeThumbnail, autoEdit, addMusicFile, removeMusic, addSoundFile, frameAnalysis, addCreditsOverlay, realClips, switchTab, get time() { return P.t; }, get exporting() { return !!EXP; },
     getAdj: () => ({ ...V.adj }),
     applyLook(adj) { pushUndo(); V.adj = { ...DEF }; for (const k of Object.keys(DEF)) if (typeof adj[k] === "number" && k !== "sharpen") { const [mn, mx] = k in FE.RANGE ? FE.RANGE[k] : [-100, 100]; V.adj[k] = Math.round(clamp(adj[k], mn, mx)); } syncAdj(); redrawSoon(); },
   };
