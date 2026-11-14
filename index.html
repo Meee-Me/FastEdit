@@ -176,6 +176,7 @@ input[type=range] { accent-color: var(--accent); height: 18px; }
 .modeseg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 .vstage, .vpanel { display: none; }
 body.mode-video .app { grid-template-areas: "top top top" "vstage vstage panel"; }
+body:not(.mode-video) .video-only { display: none !important; }
 body.mode-video .rail, body.mode-video .stagecol, body.mode-video #photoPanel, body.mode-video .photo-only { display: none !important; }
 body.mode-video .vstage { grid-area: vstage; display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
 body.mode-video .vpanel { grid-area: panel; display: flex; }
@@ -341,6 +342,52 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
   .vview { height: 46vh; min-height: 240px; flex: none; }
 }
 @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+/* Marketplace */
+.mkt { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.55); display: grid; place-items: center; padding: 16px; }
+.mkt[hidden] { display: none; }
+.mkt-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; width: min(1040px, 100%); height: min(760px, 100%); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.mkt-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.mkt-head h2 { font-size: 16px; margin: 0; }
+.mkt-search { display: flex; gap: 6px; flex: 1; min-width: 200px; }
+.mkt-search[hidden], .mkt .check[hidden] { display: none; }
+.mkt-search input { flex: 1; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; color: var(--fg); }
+.mkt .check { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; }
+.mkt-head #mktClose { margin-left: auto; }
+.mkt-tabs { display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.mkt-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 9px 10px; color: var(--muted); white-space: nowrap; }
+.mkt-tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.mkt-quick { display: flex; gap: 6px; padding: 8px 14px 0; flex-wrap: wrap; }
+.mkt-quick:empty { display: none; }
+.mkt-body { flex: 1; overflow: auto; padding: 10px 14px 16px; }
+.mkt-body .label { margin: 12px 0 8px; color: var(--muted); font-size: 12px; }
+.mkt-status { color: var(--muted); padding: 18px 0; }
+.mkt-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.mkt-grid.images { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.mkt-grid.looks { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.mkt-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.mkt-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 5px; background: var(--bg); }
+.mkt-card b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mkt-card .by, .mkt-look .by { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mkt-card .steps { color: var(--muted); font-size: 11px; }
+.mkt-card .arow { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.mkt-card .ameta { display: flex; flex-direction: column; min-width: 0; }
+.mkt-card .play { width: 30px; flex: none; }
+.mkt-card .use { margin-top: auto; }
+.mkt .lic { align-self: flex-start; font-size: 10.5px; padding: 2px 7px; border-radius: 999px; background: rgba(110,190,140,.16); color: #9fd8b3; }
+.mkt .lic.nc { background: rgba(240,164,58,.16); color: var(--accent); }
+.mkt .lic.own { background: rgba(240,164,58,.2); color: var(--accent); }
+.mkt-look { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; text-align: left; color: var(--fg); }
+.mkt-look:hover, .mkt-card:hover { border-color: var(--accent); }
+.mkt-look .sw { height: 54px; border-radius: 5px; }
+.mkt-look.font b { font-size: 18px; font-weight: 400; }
+.mkt-foot { padding: 8px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; }
+.mkt-foot a, .credit-list a { color: var(--accent); }
+.credit-list { margin: 0 0 8px; padding-left: 18px; line-height: 1.6; }
+.credits-host .hint { color: var(--muted); font-size: 11.5px; }
+.credits-host .btnrow { display: flex; gap: 6px; flex-wrap: wrap; }
+.vsnd { position: absolute; z-index: 1; top: 1px; height: 11px; line-height: 10px; background: rgba(110,190,140,.3); border: 1px solid rgba(110,190,140,.7); border-radius: 4px; color: var(--fg); font-size: 10px; padding: 0 4px; overflow: hidden; white-space: nowrap; text-align: left; }
+@media (max-width: 640px) { .mkt { padding: 0; } .mkt-panel { height: 100%; border-radius: 0; } }
+.menubar .mkt-menu { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -1455,6 +1502,8 @@ setTool("brush");
 <script src="photo-pro.js"></script>
 <script src="vendor/mp4-muxer.js"></script>
 <script src="video.js"></script>
+<script src="composer.js"></script>
+<script src="market.js"></script>
 <script src="deluxe-link.js"></script>
 </body>
 </html>

@@ -18,7 +18,7 @@
   const NAMES = { text: "Text", frame: "Frame", light_leak: "Light leak", glow: "Glow", flare: "Lens flare", stars: "Stars", birds: "Birds", sparkles: "Sparkles", snow: "Snow", rain: "Rain", bokeh: "Bokeh", confetti: "Confetti", hearts: "Hearts", moon: "Moon", sunset_stripes: "Retro sun", clouds: "Clouds", abstract: "Abstract art" };
 
   /* ================= state ================= */
-  const V = { media: [], clips: [], overlays: [], adj: { ...DEF }, ratio: "original", follow: false, frame: { x: 0.5, y: 0.5 }, muted: false, volume: 1, fadeIn: 0, fadeOut: 0, grade: 0, sel: null, selOv: null, sfx: { level: false, hum: false, voice: false, bass: false }, tone: Tone.defaultTone(), wheels: Tone.defaultWheels(), trans: {}, music: null };
+  const V = { media: [], clips: [], overlays: [], adj: { ...DEF }, ratio: "original", follow: false, frame: { x: 0.5, y: 0.5 }, muted: false, volume: 1, fadeIn: 0, fadeOut: 0, grade: 0, sel: null, selOv: null, sfx: { level: false, hum: false, voice: false, bass: false }, tone: Tone.defaultTone(), wheels: Tone.defaultWheels(), trans: {}, music: null, sounds: [] };
   let tlZoom = 1;
   let uid = 1, started = false, PW = 960, PH = 540;
   const view = $("#vCanvas"), pctx = view.getContext("2d", { willReadFrequently: true });
@@ -38,9 +38,9 @@
 
   /* ================= undo ================= */
   const undoS = [], redoS = [];
-  const snap = () => ({ clips: V.clips.map((c) => ({ ...c })), overlays: V.overlays.map((o) => ({ ...o })), adj: { ...V.adj }, ratio: V.ratio, follow: V.follow, frame: { ...V.frame }, muted: V.muted, volume: V.volume, fadeIn: V.fadeIn, fadeOut: V.fadeOut, grade: V.grade, sel: V.sel, selOv: V.selOv, sfx: { ...V.sfx }, tone: Tone.cloneTone(V.tone), wheels: JSON.parse(JSON.stringify(V.wheels)), trans: JSON.parse(JSON.stringify(V.trans)), music: V.music ? { ...V.music } : null });
+  const snap = () => ({ clips: V.clips.map((c) => ({ ...c })), overlays: V.overlays.map((o) => ({ ...o })), adj: { ...V.adj }, ratio: V.ratio, follow: V.follow, frame: { ...V.frame }, muted: V.muted, volume: V.volume, fadeIn: V.fadeIn, fadeOut: V.fadeOut, grade: V.grade, sel: V.sel, selOv: V.selOv, sfx: { ...V.sfx }, tone: Tone.cloneTone(V.tone), wheels: JSON.parse(JSON.stringify(V.wheels)), trans: JSON.parse(JSON.stringify(V.trans)), music: V.music ? { ...V.music } : null, sounds: V.sounds.map((x) => ({ ...x })) });
   function pushUndo() { undoS.push(snap()); if (undoS.length > 40) undoS.shift(); redoS.length = 0; updUndo(); }
-  function restore(s) { Object.assign(V, s); applyVolume(); rebuildAll(); syncMusic(P.t, false); resize(); refreshAll(); seek(Math.min(P.t, total())); }
+  function restore(s) { Object.assign(V, s); applyVolume(); rebuildAll(); syncMusic(P.t, false); syncSounds(P.t, false); resize(); refreshAll(); seek(Math.min(P.t, total())); }
   function undo() { if (!undoS.length) return; redoS.push(snap()); restore(undoS.pop()); updUndo(); }
   function redo() { if (!redoS.length) return; undoS.push(snap()); restore(redoS.pop()); updUndo(); }
   function updUndo() { $("#vUndo").disabled = !undoS.length; $("#vRedo").disabled = !redoS.length; }
@@ -162,9 +162,20 @@
     let mx = -99; for (let k = w - 3; k <= w + 3; k++) if (k >= 0 && k < a.db.length) mx = Math.max(mx, a.db[k]);
     return mx > a.loud - 12;
   }
+  function syncSounds(t, playing) {
+    for (const sd of V.sounds) {
+      const m = V.media.find((x) => x.id === sd.mediaId); if (!m) continue;
+      if (AC) connectMusic(m);
+      const local = t - sd.start, inRange = local >= 0 && local < m.duration - 0.03;
+      if (playing && inRange) { if (m.el.paused) { m.el.currentTime = local; m.el.play().catch(() => {}); } else if (Math.abs(m.el.currentTime - local) > 0.3) m.el.currentTime = local; }
+      else if (!m.el.paused) m.el.pause();
+      if (m.mgain) m.mgain.gain.value = sd.vol; else m.el.volume = clamp(sd.vol, 0, 1);
+    }
+  }
   function syncMusic(t, playing) {
     const m = musicMedia();
-    for (const o of V.media) if (o.kind === "audio" && o !== m && !o.el.paused) o.el.pause();
+    const soundIds = new Set(V.sounds.map((x) => x.mediaId));
+    for (const o of V.media) if (o.kind === "audio" && o !== m && !soundIds.has(o.id) && !o.el.paused) o.el.pause();
     if (!m) return;
     if (AC) connectMusic(m);
     const local = t - V.music.start, inRange = local >= 0 && local < m.duration - 0.05 && t < total() - 0.02;
@@ -518,7 +529,7 @@
     if (at) { const m = mediaOf(at.clip); if (m.kind === "video") { if (!m.el.paused) m.el.pause(); await seekEl(m.el, at.clip.in + (P.t - at.start) * at.clip.speed); } }
     await seekAux(P.t);
     if (my !== seekToken) return;
-    if (!P.playing) syncMusic(P.t, false);
+    if (!P.playing) { syncMusic(P.t, false); syncSounds(P.t, false); }
     draw(); updateTime();
   }
   async function startClipAt(t) {
@@ -550,7 +561,7 @@
       startClipAt(end + 1e-4).then(() => { if (!P.playing) return; draw(); if (EXP?.rec?.state === "paused") EXP.rec.resume(); P.raf = requestAnimationFrame(loop); });
       return;
     }
-    P.t = Math.max(P.clipStart, t); syncMusic(P.t, true); syncAux(P.t, true); draw(); updateTime(); followHead(); if (EXP) updateExportProgress();
+    P.t = Math.max(P.clipStart, t); syncMusic(P.t, true); syncSounds(P.t, true); syncAux(P.t, true); draw(); updateTime(); followHead(); if (EXP) updateExportProgress();
     P.raf = requestAnimationFrame(loop);
   }
   function setPlayBtn() { const b = $("#vPlay"); b.textContent = P.playing ? "Pause" : "Play"; b.setAttribute("aria-label", P.playing ? "Pause" : "Play"); }
@@ -689,7 +700,13 @@
       el.style.left = a * pps + "px"; el.style.width = Math.max(4, (b - a) * pps - 2) + "px"; el.title = `${mm.name} · from ${fmt(a)}`;
       const wv = waveCanvas(mm, 0, b - a, Math.round((b - a) * pps)); if (wv) el.append(wv);
       const lab = document.createElement("span"); lab.textContent = "♪ " + mm.name + (V.music.duck ? " · ducks under speech" : ""); el.append(lab); mu.append(el);
-    } else { const e = document.createElement("span"); e.className = "ovempty"; e.textContent = "Music appears here (Edit › Music)"; mu.append(e); }
+    } else if (!V.sounds.length) { const e = document.createElement("span"); e.className = "ovempty"; e.textContent = "Music and sound effects appear here"; mu.append(e); }
+    for (const sd of V.sounds) {
+      const m = V.media.find((x) => x.id === sd.mediaId); if (!m) continue;
+      const el = document.createElement("button"); el.type = "button"; el.className = "vsnd"; el.dataset.snd = sd.id;
+      el.style.left = sd.start * pps + "px"; el.style.width = Math.max(10, Math.min(T - sd.start, m.duration) * pps - 1) + "px";
+      el.title = `Sound effect: ${m.name} at ${fmt(sd.start)} (click to remove)`; el.textContent = "🔊 " + m.name; mu.append(el);
+    }
     updateTime();
   }
   function syncEdit() {
@@ -748,6 +765,8 @@
   let trimDrag = null;
   tlEl.addEventListener("pointerdown", (e) => {
     if (!V.clips.length) return;
+    const sndEl = e.target.closest(".vsnd");
+    if (sndEl) { e.preventDefault(); pushUndo(); V.sounds = V.sounds.filter((x) => x.id !== +sndEl.dataset.snd); syncSounds(P.t, false); refreshAll(); FE.toast("Removed the sound effect"); return; }
     const th = e.target.closest(".trim");
     if (th) {
       const c = V.clips.find((x) => x.id === +th.dataset.clip); if (!c) return;
@@ -992,6 +1011,11 @@
         src.start(a, 0, b - a); any = true;
       }
     }
+    for (const sd of V.sounds) {
+      const m = V.media.find((x) => x.id === sd.mediaId), buf = m && (await decodedBuffer(m)); if (!buf || sd.start >= T) continue;
+      const src = oc.createBufferSource(), g = oc.createGain(); src.buffer = buf; g.gain.value = sd.vol; src.connect(g); g.connect(oc.destination);
+      src.start(sd.start, 0, Math.min(buf.duration, T - sd.start)); any = true;
+    }
     return any ? await oc.startRendering() : null;
   }
   async function pickVideoCodec(W, H) {
@@ -1073,7 +1097,7 @@
     if (!canvas.captureStream) { FE.toast("This browser can't record video from the editor"); return; }
     pause(); ensureAudio();
     const stream = canvas.captureStream(FPS);
-    const hasVideoAudio = (!V.muted && usedMedia().some((m) => m.kind === "video")) || !!musicMedia();
+    const hasVideoAudio = (!V.muted && usedMedia().some((m) => m.kind === "video")) || !!musicMedia() || V.sounds.length > 0;
     if (hasVideoAudio && recDest) recDest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
     const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: Math.round(W * H * FPS * 0.12) });
     const chunks = [];
@@ -1392,7 +1416,14 @@
   mountVideoChat();
   let saved = "photo"; try { saved = localStorage.getItem("fastedit.mode") || "photo"; } catch {}
   if (saved === "video") setMode("video");
-  window.FEVideo = { V, seek, total, play, pause, addFiles, makeVideo, makeThumbnail, autoEdit, get exporting() { return !!EXP; },
+  async function addSoundFile(file, at) {
+    const m = await loadAudioFile(file); V.media.push(m); pushUndo();
+    const sd = { id: uid++, mediaId: m.id, start: clamp(at ?? P.t, 0, Math.max(0, total() - 0.1)), vol: 0.9 };
+    V.sounds.push(sd); ensureAudio(); connectMusic(m); refreshAll(); return { m, sd };
+  }
+  function frameAnalysis() { if (!V.clips.length) return null; const c = mk(PW, PH); renderFrame(c.getContext("2d"), PW, PH, Math.min(P.t, total() - 0.05), { noOverlays: true }); return AI.analyze(c); }
+  function addCreditsOverlay(text) { if (!V.clips.length) return; pushUndo(); const T = total(), st = Math.max(0, T - 4); addOverlay({ kind: "text", text, clause: "bottom sans", k: 0.55, color: null }, frameAnalysis(), { start: st, end: T }); refreshAll(); redrawSoon(); }
+  window.FEVideo = { V, seek, total, play, pause, addFiles, makeVideo, makeThumbnail, autoEdit, addMusicFile, addSoundFile, frameAnalysis, addCreditsOverlay, realClips, switchTab, get time() { return P.t; }, get exporting() { return !!EXP; },
     getAdj: () => ({ ...V.adj }),
     applyLook(adj) { pushUndo(); V.adj = { ...DEF }; for (const k of Object.keys(DEF)) if (typeof adj[k] === "number" && k !== "sharpen") { const [mn, mx] = k in FE.RANGE ? FE.RANGE[k] : [-100, 100]; V.adj[k] = Math.round(clamp(adj[k], mn, mx)); } syncAdj(); redrawSoon(); },
   };

@@ -75,6 +75,31 @@ Switch to **Video** at the top. Everything runs on your device in [`video.js`](v
 - **Adjustments:** 16 sliders plus presets and a before/after compare
 - **Files:** open, drag in or paste images; export PNG, JPEG or WebP; 30-step undo
 
+## Marketplace
+
+**Marketplace** (in the photo menu bar, or top right in Video mode) has free media and add-ons:
+
+- **Music**: Fast Edit originals, composed on your device to fit the video's length (`composer.js`: upbeat, chill, cinematic, energetic, happy, dreamy). They're yours, with no credit needed. Also Creative Commons songs from Jamendo, ccMixter and Wikimedia via [Openverse](https://openverse.org), with previews.
+- **Sound effects**: 8 originals made on your device (whoosh, impact, riser, pop, ding, click, swipe, glitch) plus Creative Commons sounds. They go on the sound track at the playhead; click one on the timeline to remove it. They're included in exports.
+- **Photos**: Creative Commons photos. In Photo mode they become a new layer; in Video mode, a clip.
+- **Looks**, **Effects**, **Templates** (several AI steps in one go) and **Fonts** (Google Fonts).
+- **Credits**: every Creative Commons item you use is listed with the credit its license asks for. You can copy the list or add it to the end of the video. "Commercial use OK" (on by default) hides non-commercial licenses. Nothing is No-Derivatives.
+
+Fast Edit AI uses the Marketplace too:
+
+- "find upbeat music" or "find a different song" picks a song close to the video's length.
+- "compose cinematic music" writes an original track.
+- "add a whoosh sound", "find a photo of mountains" and "add credits to the end" also work.
+- If a song can't be downloaded, it composes an original instead.
+
+Fast Edit doesn't download from Google or take copyrighted songs. Everything comes with a license that allows reuse.
+
+`api/media.mjs` is a small Vercel function that downloads an Openverse item for the browser, because most hosts don't allow downloads from other sites.
+
+- It takes only an Openverse id, looks the item up, and fetches exactly the file Openverse lists, up to 25 MB.
+- It isn't an open proxy.
+- If a host refuses (Freesound often does), Fast Edit says so. Photos then fall back to Openverse's own copy, and the AI picks another item or uses an original.
+
 ## Deluxe account
 
 Fast Edit is a Deluxe website. **Sign in with Deluxe Main** (top right) uses your Deluxe account, and the ∷ menu links every Deluxe website. Signing in is optional; guests can use everything.
@@ -85,4 +110,4 @@ Fast Edit is a Deluxe website. **Sign in with Deluxe Main** (top right) uses you
 
 ## Deploy
 
-It's a static site with no build step. On Vercel, import the repository and deploy. No environment variables are needed.
+It's a static site with no build step, plus one function in `api/` (the Marketplace download helper). On Vercel, import the repository and deploy. No environment variables are needed.
