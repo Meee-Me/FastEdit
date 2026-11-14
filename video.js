@@ -787,13 +787,13 @@
   $("#vTrAll").onclick = () => { if (V.clips.length < 2) return FE.toast("Add or split clips first: transitions go between clips"); pushUndo(); const type = $("#vTrType").value !== "none" ? $("#vTrType").value : "cross"; const n = setAllTransitions(type, +$("#vTrDur").value || 0.8); refreshAll(); redrawSoon(); FE.toast(`${TR_NAMES[type]} added to ${n} cut${n > 1 ? "s" : ""}`); };
   function setAllTransitions(type, dur) { let n = 0; V.clips.forEach((c, i) => { if (i > 0) { V.trans[c.id] = { type, dur: clamp(dur, 0.2, Math.min(3, clipLen(c) - 0.05, clipLen(V.clips[i - 1]) - 0.05)) }; n++; } }); return n; }
   $("#vMusAdd").onclick = () => $("#vMusFile").click();
-  $("#vMusFile").onchange = async (e) => {
-    const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  async function addMusicFile(f) {
     busy(true, "Loading music…");
-    try { const m = await loadAudioFile(f); V.media.push(m); pushUndo(); V.music = { mediaId: m.id, start: 0, vol: 0.6, duck: true }; ensureAudio(); connectMusic(m); await analyzeAudio(m); await analyzeAllAudio(); FE.toast(`Added “${m.name}” as music`); }
-    catch (err) { FE.toast(err.message); }
-    busy(false); refreshAll();
-  };
+    try { const m = await loadAudioFile(f); V.media.push(m); pushUndo(); V.music = { mediaId: m.id, start: 0, vol: 0.6, duck: true }; ensureAudio(); connectMusic(m); await analyzeAudio(m); await analyzeAllAudio(); FE.toast(`Added “${m.name}” as music`); return m; }
+    catch (err) { FE.toast(err.message); return null; }
+    finally { busy(false); refreshAll(); }
+  }
+  $("#vMusFile").onchange = async (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) await addMusicFile(f); };
   $("#vMusVol").addEventListener("input", () => { if (!V.music) return; V.music.vol = $("#vMusVol").value / 100; $("#vMusVolV").textContent = $("#vMusVol").value + "%"; syncMusic(P.t, P.playing); });
   $("#vMusStart").onchange = () => { if (!V.music) return; pushUndo(); V.music.start = clamp(+$("#vMusStart").value || 0, 0, total()); refreshAll(); syncMusic(P.t, P.playing); };
   $("#vMusDuck").onchange = async () => { if (!V.music) return; pushUndo(); V.music.duck = $("#vMusDuck").checked; if (V.music.duck) { busy(true, "Listening for speech…"); await analyzeAllAudio(); busy(false); } refreshAll(); };
@@ -1308,7 +1308,7 @@
       V.fadeIn = Math.max(V.fadeIn, 0.6); V.fadeOut = Math.max(V.fadeOut, 1); steps.push("added a fade in and a fade out");
       if (musicMedia()) { V.music.duck = true; steps.push("set the music to dip whenever someone talks"); }
       undoS.length = undoLen; undoS.push(before); redoS.length = 0; updUndo();
-      V.sel = V.clips[0].id; resize(); refreshAll(); await seek(0);
+      V.sel = V.clips[0].id; resize(); refreshAll(); await seek(Math.min(1, total() / 2));
       const th = await makeThumbnail(topic, { quiet: true });
       const secsTaken = ((performance.now() - t0) / 1000).toFixed(1);
       return {
@@ -1325,12 +1325,36 @@
   function mountVideoChat() {
     videoChat = window.FEChat.mount($("#videoChat"), {
       mode: "video",
-      placeholder: "Message Fast Edit AI…",
-      welcome: "Hi! I'm **Fast Edit AI**. I can edit your video: trim and shorten it, add transitions and captions, grade the color, clean up the sound, or make a whole video from a topic. What should we make?",
+      placeholder: "Message Fast Edit AI, or attach videos…",
+      welcome: "Hi! I'm **Fast Edit AI**. Attach your videos, photos and music with 📎 (or drop them here) and I'll edit them into a finished video by myself, with a thumbnail. I can also edit your video step by step: trim and shorten it, add transitions and captions, grade the color, clean up the sound, or make a whole video from a topic. What should we make?",
       starters: ["Edit it for me", "Make a video about Fast Edit", "Make a thumbnail", "Vertical for TikTok", "What can you do?"],
       edit: videoEdit,
       undo: () => { const had = undoS.length > 0; if (had) undo(); return had; },
       makeVideo: (topic) => makeVideo(topic),
+      attach: {
+        accept: "video/*,image/*,audio/*,.mp4,.mov,.webm,.m4v,.mp3,.wav,.m4a",
+        title: "Attach videos, photos or music",
+        reject: "Only videos, photos and music can be attached here",
+        ok: (f) => /^(video|image|audio)\//.test(f.type) || /\.(mp4|mov|webm|m4v|mkv|mp3|wav|m4a|aac|ogg|jpe?g|png|webp|heic)$/i.test(f.name),
+        send: async (files, text) => {
+          const isAudio = (f) => f.type.startsWith("audio/") || /\.(mp3|wav|m4a|aac|ogg)$/i.test(f.name);
+          const visual = files.filter((f) => !isAudio(f)), audio = files.filter(isAudio);
+          const before = realClips().length;
+          if (visual.length) await addFiles(visual);
+          const added = realClips().length - before;
+          let song = null; if (audio.length) song = await addMusicFile(audio[0]);
+          const got = [added ? `${added} clip${added > 1 ? "s" : ""}` : "", song ? `“${song.name}” as music` : ""].filter(Boolean).join(" and ");
+          if (!added && !song) return { text: "I couldn't open those files. Try MP4, MOV or WebM videos, JPEG or PNG photos, and MP3, WAV or M4A music." };
+          if (!realClips().length) return { text: `Added ${got}. Now attach some videos or photos and I'll edit everything together.`, chips: ["What can you do?"] };
+          const r = text ? AI.converse(text, "video") : { kind: "auto_edit" };
+          let res;
+          if (r.kind === "auto_edit" || r.kind === "make_video") res = await autoEdit(r.topic, r.secs);
+          else if (r.kind === "edit") { try { const e = await videoEdit(text); res = { ...e, text: e.text }; } catch { res = await autoEdit(null, null); } }
+          else if (r.kind === "make_thumbnail") res = await makeThumbnail(r.topic);
+          else res = await autoEdit(AI.topicOf(text) || null, null);
+          return { ...res, text: `Got ${got}. ` + (res.text || "") };
+        },
+      },
       makeThumbnail: (topic, text) => makeThumbnail(topic, { again: /another|again|different|new one/i.test(text || "") }),
       autoEdit: (topic, secs) => autoEdit(topic, secs),
       makePoster: async () => ({ text: "Posters are made in Photo mode. Switch to **Photo** at the top and ask me there.", chips: ["Make a video about Fast Edit"] }),

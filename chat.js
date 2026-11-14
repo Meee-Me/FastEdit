@@ -24,6 +24,7 @@
       </div>
       <div class="chat-log" role="log" aria-live="polite" aria-label="Conversation with Fast Edit AI"></div>
       <form class="chat-composer">
+        ${cfg.attach ? `<button class="chat-attach" type="button" aria-label="Attach files" title="${esc(cfg.attach.title)}"><svg viewBox="0 0 24 24"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 01-7.8-7.8l8.6-8.6a3.7 3.7 0 015.2 5.2l-8.6 8.6a1.8 1.8 0 01-2.6-2.6l7.9-7.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><input type="file" class="chat-file" multiple hidden accept="${esc(cfg.attach.accept)}">` : ""}
         <textarea rows="1" aria-label="Message Fast Edit AI" placeholder="${esc(cfg.placeholder)}"></textarea>
         <button class="chat-send" type="submit" aria-label="Send" title="Send (Enter)"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </form>
@@ -35,7 +36,12 @@
 
     const scroll = () => { log.scrollTop = log.scrollHeight; };
     function clearChips() { log.querySelectorAll(".msg-chips").forEach((c) => c.remove()); }
-    function userMsg(text) { clearChips(); const m = document.createElement("div"); m.className = "msg user"; m.textContent = text; log.append(m); scroll(); }
+    function userMsg(text, files) {
+      clearChips(); const m = document.createElement("div"); m.className = "msg user";
+      if (files && files.length) { const f = document.createElement("div"); f.className = "msg-files"; for (const x of files) { const c = document.createElement("span"); c.className = "file-chip"; c.textContent = fileLabel(x); f.append(c); } m.append(f); }
+      if (text) { const t = document.createElement("div"); t.textContent = text; m.append(t); }
+      log.append(m); scroll();
+    }
     function typing() { const m = document.createElement("div"); m.className = "msg ai"; m.innerHTML = `<span class="chat-avatar sm">${BOLT}</span><div class="msg-body"><span class="typing"><i></i><i></i><i></i></span></div>`; log.append(m); scroll(); return m; }
     async function aiMsg(el, reply) {
       const body = el.querySelector(".msg-body"); body.innerHTML = "";
@@ -105,15 +111,37 @@
       }
     }
     const lower = (s) => s.charAt(0).toLowerCase() + s.slice(1);
+    let pending = [];
+    const tray = document.createElement("div"); tray.className = "chat-tray"; tray.hidden = true; form.before(tray);
+    function renderTray() {
+      tray.innerHTML = ""; tray.hidden = !pending.length;
+      pending.forEach((f, i) => { const c = document.createElement("span"); c.className = "file-chip"; c.textContent = fileLabel(f); const x = document.createElement("button"); x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", "Remove " + f.name); x.onclick = () => { pending.splice(i, 1); renderTray(); }; c.append(x); tray.append(c); });
+    }
+    const fileLabel = (f) => `${/^video/.test(f.type) ? "🎬" : /^audio/.test(f.type) ? "🎵" : /^image/.test(f.type) ? "🖼" : "📄"} ${f.name}`;
+    function addPending(files) {
+      const ok = [...files].filter((f) => cfg.attach.ok(f));
+      if (ok.length < files.length) window.FE && FE.toast(cfg.attach.reject);
+      if (!ok.length) return;
+      pending.push(...ok); renderTray(); box.focus();
+    }
+    if (cfg.attach) {
+      const fileIn = host.querySelector(".chat-file");
+      host.querySelector(".chat-attach").onclick = () => fileIn.click();
+      fileIn.onchange = () => { addPending(fileIn.files); fileIn.value = ""; };
+      host.addEventListener("dragover", (e) => { if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); host.classList.add("drop-on"); } });
+      host.addEventListener("dragleave", (e) => { if (e.target === host || !host.contains(e.relatedTarget)) host.classList.remove("drop-on"); });
+      host.addEventListener("drop", (e) => { e.preventDefault(); host.classList.remove("drop-on"); addPending(e.dataTransfer.files); });
+    }
     async function send(text) {
       text = String(text || "").trim();
-      if (!text || working) return;
+      const files = pending; pending = []; renderTray();
+      if ((!text && !files.length) || working) { if (files.length) { pending = files; renderTray(); } return; }
       working = true; sendBtn.disabled = true; box.value = ""; autosize();
-      userMsg(text);
+      userMsg(text, files);
       const el = typing();
       await new Promise((r) => setTimeout(r, 250));
       let reply;
-      try { reply = await respond(text); } catch (e) { console.error(e); reply = { text: "Something went wrong. Try again." }; }
+      try { reply = files.length ? await cfg.attach.send(files, text) : await respond(text); } catch (e) { console.error(e); reply = { text: "Something went wrong" + (e && e.message ? ": " + e.message : "") + ". Try again." }; }
       await aiMsg(el, reply);
       working = false; sendBtn.disabled = false;
     }
@@ -124,7 +152,7 @@
     host.querySelector(".chat-new").onclick = () => { mem.last = null; welcome(); box.focus(); };
     function setStatus(text, state) { statusEl.textContent = text; dot.className = "agentdot" + (state ? " " + state : ""); }
     welcome();
-    const api = { send, setStatus, welcome, mem };
+    const api = { send, setStatus, welcome, mem, cfg, attach: (files) => addPending(files) };
     chats[cfg.mode] = api;
     return api;
   }

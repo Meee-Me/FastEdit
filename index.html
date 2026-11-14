@@ -300,6 +300,16 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
 .msg-text b { color: var(--fg); font-weight: 600; }
 .msg-img { display: block; width: 100%; max-width: 420px; margin-top: 10px; border-radius: 10px; border: 1px solid var(--line); }
 .msg-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chat-attach { width: 34px; height: 34px; border-radius: 50%; border: 0; background: none; color: var(--muted); display: grid; place-items: center; flex: none; }
+.chat-attach:hover { color: var(--fg); background: var(--panel-2); }
+.chat-attach svg { width: 19px; height: 19px; }
+.chat-composer { padding-left: 6px !important; }
+.chat-tray { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 12px 6px; }
+.file-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-chip button { border: 0; background: none; color: var(--muted); padding: 0 2px; }
+.msg-files { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.msg.user .file-chip { background: var(--bg); }
+.chat.drop-on { outline: 2px dashed var(--accent); outline-offset: -6px; }
 .msg-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .typing { display: inline-flex; gap: 4px; padding-top: 9px; }
 .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite ease-in-out; }
@@ -1313,6 +1323,27 @@ function mountPhotoChat() {
     edit: photoEdit,
     undo: () => { const had = !$("#btnUndo").disabled; if (had) doUndo(); return had; },
     makePoster: photoPoster,
+    attach: {
+      accept: "image/*,video/*", title: "Attach a photo (or videos to edit in Video mode)", reject: "Only photos and videos can be attached here",
+      ok: (f) => /^(image|video)\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic|mp4|mov|webm|m4v)$/i.test(f.name),
+      send: async (files, text) => {
+        if (files.some(f => f.type.startsWith("video/") || /\.(mp4|mov|webm|m4v)$/i.test(f.name))) {
+          document.querySelector('[data-app-mode="video"]').click();
+          setTimeout(() => { const v = window.FEChat.get("video"); if (v) { v.attach(files); v.send(text); } }, 400);
+          return { text: "Videos are edited in Video mode, so I've switched over and started there." };
+        }
+        const img = files.find(f => f.type.startsWith("image/")) || files[0];
+        await loadImage(img, false);
+        const rest = files.filter(f => f !== img);
+        for (const f of rest) await loadImage(f, true);
+        const got = `Opened “${img.name}”${rest.length ? ` and placed ${rest.length} more as layer${rest.length > 1 ? "s" : ""}` : ""}.`;
+        if (!text) return { text: got + " What would you like me to do with it?", chips: ["Auto-enhance", "Blur the background", "Make a thumbnail", "Critique this photo"] };
+        const r = FastAI.converse(text, "photo");
+        if (r.kind === "make_thumbnail") { const t = await photoChat.cfg.makeThumbnail(r.topic); return { ...t, text: got + " " + t.text }; }
+        try { const e = await photoEdit(text); return { ...e, text: got + " " + e.text }; }
+        catch { return { text: got + " I didn't catch an edit in your message. What should I do with it?", chips: ["Auto-enhance", "Make a thumbnail"] }; }
+      },
+    },
     makeThumbnail: async (topic) => {
       setBusy(true, "Designing the thumbnail…"); await new Promise(r => setTimeout(r, 30));
       try {
