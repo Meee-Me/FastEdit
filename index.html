@@ -388,6 +388,18 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
 .vsnd { position: absolute; z-index: 1; top: 1px; height: 11px; line-height: 10px; background: rgba(110,190,140,.3); border: 1px solid rgba(110,190,140,.7); border-radius: 4px; color: var(--fg); font-size: 10px; padding: 0 4px; overflow: hidden; white-space: nowrap; text-align: left; }
 @media (max-width: 640px) { .mkt { padding: 0; } .mkt-panel { height: 100%; border-radius: 0; } }
 .menubar .mkt-menu { color: var(--accent); }
+@media (max-width: 1520px) { #docInfo { display: none !important; } }
+.spot-box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 2px 12px 12px; margin-top: 4px; }
+.spot-form { display: flex; gap: 6px; }
+.spot-form input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; color: var(--fg); }
+.spot-box .hint { color: var(--muted); font-size: 11.5px; margin: 8px 0 0; }
+.spot-out { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 10px; align-items: start; }
+.spot-out iframe, .msg-embed { width: 100%; border: 0; border-radius: 12px; }
+.msg-embed { margin-top: 8px; }
+.spot-meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.spot-meta .hint { margin: 0; }
+.spot-meta .btn { align-self: flex-start; }
+@media (max-width: 640px) { .spot-out { grid-template-columns: 1fr; } .spot-form { flex-direction: column; } }
 </style>
 </head>
 <body>

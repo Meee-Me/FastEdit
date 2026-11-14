@@ -92,6 +92,14 @@ Fast Edit AI uses the Marketplace too:
 - "add a whoosh sound", "find a photo of mountains" and "add credits to the end" also work.
 - If a song can't be downloaded, it composes an original instead.
 
+**Sounds like a Spotify song** (at the top of Music, or paste a Spotify song link in the chat):
+
+- Fast Edit reads the song's public details (title, artist, year) and the artist's genres from [MusicBrainz](https://musicbrainz.org).
+- It then finds free music in a similar style, or composes an original in that style ("compose one in this style").
+- The Spotify song plays in Spotify's own player, for listening only.
+- Spotify audio is never downloaded or put into your video: Spotify's terms don't allow it, and platforms mute or block videos that use label music.
+- `api/spotify.mjs` takes only an `open.spotify.com/track/…` link.
+
 Fast Edit doesn't download from Google or take copyrighted songs. Everything comes with a license that allows reuse.
 
 `api/media.mjs` is a small Vercel function that downloads an Openverse item for the browser, because most hosts don't allow downloads from other sites.

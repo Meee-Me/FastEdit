@@ -106,6 +106,59 @@
   async function useOriginalSfx(key) { toVideo(); const f = await synthSfx(key); await window.FEVideo.addSoundFile(f); return SFX[key].name; }
   const sfxKeyFor = (q) => { q = String(q || "").toLowerCase(); return Object.keys(SFX).find((k) => q.includes(k) || q.includes(SFX[k].name.toLowerCase())) || (/swoosh|swish|transition/.test(q) ? "whoosh" : /boom|hit|bass|drop/.test(q) ? "impact" : /bell|chime|notification/.test(q) ? "ding" : /bubble|pluck/.test(q) ? "pop" : /tap|tick|button|mouse/.test(q) ? "click" : /build ?up|rise|tension/.test(q) ? "riser" : /error|digital|static/.test(q) ? "glitch" : null); };
 
+  /* ---------- "sounds like" a Spotify song (details only; Spotify audio never enters the video) ---------- */
+  const SPOTIFY_RE = /(https:\/\/open\.spotify\.com\/(?:intl-[a-z]{2}(?:-[a-z]{2})?\/)?track\/[A-Za-z0-9]{22}[^\s]*|spotify:track:[A-Za-z0-9]{22})/;
+  const STYLES = [
+    [/reggaeton|latin|salsa|bachata|cumbia/, "latin reggaeton", "upbeat", "Latin"],
+    [/hip ?hop|rap|trap|drill|grime/, "hip hop beat", "energetic", "Hip hop"],
+    [/r&b|rnb|soul|funk/, "rnb soul groove", "chill", "R&B / soul"],
+    [/house|techno|edm|electro(?!pop)|dance(?!-pop)|trance|dubstep|drum and bass/, "electronic dance", "energetic", "Electronic / dance"],
+    [/synth-?pop|new wave|synthwave|80s/, "synthpop retro", "upbeat", "Synth-pop"],
+    [/metal|punk|hard rock|grunge/, "rock energetic guitar", "energetic", "Rock"],
+    [/rock|indie|alternative/, "indie rock", "energetic", "Indie / rock"],
+    [/soundtrack|orchestral|classical|film|score|epic/, "cinematic orchestral", "cinematic", "Cinematic"],
+    [/ambient|lo-?fi|chill|downtempo|new age/, "chill lofi ambient", "chill", "Chill / lo-fi"],
+    [/folk|acoustic|country|singer-songwriter|bluegrass/, "acoustic folk guitar", "happy", "Acoustic / folk"],
+    [/jazz|blues|swing|bossa/, "jazz", "chill", "Jazz"],
+    [/dark|sad|ballad|emo/, "emotional piano", "dreamy", "Emotional"],
+    [/pop|k-pop|j-pop|electropop/, "upbeat pop", "upbeat", "Pop"],
+  ];
+  function styleFor(info) {
+    for (const g of (info.genres || []).map((x) => x.toLowerCase())) for (const [re, query, mood, label] of STYLES) if (re.test(g)) return { query, mood, label };
+    return { query: "upbeat pop", mood: "upbeat", label: "Pop" };
+  }
+  let lastSpot = null;
+  async function spotifyInfo(link) {
+    let r;
+    try { r = await fetch(`/api/spotify?url=${encodeURIComponent(link)}`); } catch { throw new Error("Couldn't reach Fast Edit's helper. Check your connection."); }
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Couldn't read that Spotify link (${r.status}).`);
+    d.style = styleFor(d); lastSpot = d; return d;
+  }
+  const spotLine = (d) => `“${d.title}” by ${d.artist}${d.year ? ` (${d.year})` : ""}`;
+  function spotHTML() {
+    const d = lastSpot;
+    return `<div class="spot-box"><div class="label">Sounds like a Spotify song</div>
+      <form class="spot-form"><input type="url" placeholder="Paste a Spotify song link (open.spotify.com/track/…)" aria-label="Spotify song link" value="${d ? esc(d.link) : ""}"><button class="btn sm primary">Find similar free music</button></form>
+      ${d ? `<div class="spot-out"><iframe src="${esc(d.embed)}?utm_source=generator&theme=0" title="Spotify player: ${esc(d.title)}" height="80" loading="lazy" allow="autoplay; clipboard-write; encrypted-media"></iframe>
+        <div class="spot-meta"><b>${esc(spotLine(d))}</b><span class="by">Style: ${esc(d.style.label)}${d.genres.length ? " · " + esc(d.genres.slice(0, 3).join(", ")) : ""}</span>
+        <span class="hint">Spotify songs play here for listening only; they can't go into your video. The songs below are free ones in a similar style.</span>
+        <button class="btn sm spot-compose">Compose an original in this style</button></div></div>` : `<p class="hint">Fast Edit reads the song's artist and genre, then finds free music that feels similar. Spotify's own audio is never added to your video.</p>`}
+    </div>`;
+  }
+  function wireSpot(b) {
+    const f = b.querySelector(".spot-form"); if (!f) return;
+    f.onsubmit = async (e) => {
+      e.preventDefault(); const v = f.querySelector("input").value.trim(), btn = f.querySelector("button");
+      if (!SPOTIFY_RE.test(v)) { toast("Paste a Spotify song link, like https://open.spotify.com/track/…"); return; }
+      btn.disabled = true; btn.textContent = "Reading…";
+      try { const d = await spotifyInfo(v.match(SPOTIFY_RE)[1]); $("#mktQ").value = d.style.query; load(d.style.query); }
+      catch (err) { toast(err.message); btn.disabled = false; btn.textContent = "Find similar free music"; }
+    };
+    const c = b.querySelector(".spot-compose");
+    if (c) c.onclick = () => busyCard(async () => { const r = await useOriginal(lastSpot.style.mood); toast(`Composed “${r.title}” in a ${lastSpot.style.label.toLowerCase()} style`); })(c);
+  }
+
   /* ---------- using things ---------- */
   function toVideo() { if (mode() !== "video") document.querySelector('[data-app-mode="video"]').click(); }
   async function useMusic(item) {
@@ -206,8 +259,8 @@
   let loadSeq = 0;
   async function load(q) {
     const t = tab, b = body(), my = ++loadSeq;
-    b.innerHTML = `${t === "music" ? originalsHTML() : t === "sfx" ? sfxOriginalsHTML() : ""}<div class="mkt-status">Searching Openverse…</div>`;
-    if (t === "music") wireOriginals(); if (t === "sfx") wireSfxOriginals();
+    b.innerHTML = `${t === "music" ? spotHTML() + originalsHTML() : t === "sfx" ? sfxOriginalsHTML() : ""}<div class="mkt-status">Searching Openverse…</div>`;
+    if (t === "music") { wireSpot(b); wireOriginals(); } if (t === "sfx") wireSfxOriginals();
     try {
       const type = t === "photos" ? "images" : "audio", res = await search(type, q, { kind: t === "sfx" ? "sound_effect" : "music", commercial: $("#mktCom").checked });
       if (tab !== t || my !== loadSeq) return;
@@ -282,18 +335,19 @@
   /* ---------- Fast Edit AI ---------- */
   const MOOD_Q = { upbeat: "upbeat pop", chill: "chill lofi", cinematic: "cinematic", energetic: "energetic electronic", happy: "happy acoustic", dreamy: "ambient dreamy" };
   const MOOD_WORDS = /\b(upbeat|chill|lo-?fi|cinematic|epic|happy|sad|romantic|energetic|dreamy|ambient|calm|relaxing|piano|acoustic|rock|jazz|electronic|hip ?hop|dramatic|inspiring|corporate|funky|summer|travel|emotional|dance|orchestral|guitar)\b/gi;
-  let triedMusic = new Set(), lastMusicQuery = null;
+  let triedMusic = new Set(), lastMusicQuery = null, lastStyleMood = null;
   const ai = {
-    async findMusic({ text = "", again } = {}) {
+    async findMusic({ text = "", again, query, mood: moodIn, intro = "" } = {}) {
       toVideo();
-      const words = (text.match(MOOD_WORDS) || []).map((w) => w.toLowerCase());
-      const mood = FastComposer.moodFor(window.FEVideo.frameAnalysis());
-      let q = words.length ? words.join(" ") : again && lastMusicQuery ? lastMusicQuery : MOOD_Q[mood];
+      const words = query ? [] : (text.match(MOOD_WORDS) || []).map((w) => w.toLowerCase());
+      const mood = moodIn || (again && lastStyleMood) || FastComposer.moodFor(window.FEVideo.frameAnalysis());
+      if (!again) lastStyleMood = moodIn || null;
+      let q = query || (words.length ? words.join(" ") : again && lastMusicQuery ? lastMusicQuery : MOOD_Q[mood]);
       lastMusicQuery = q; if (!again) triedMusic = new Set();
       const need = (window.FEVideo.total() || 20) * 1000;
       let results;
       try { results = (await search("audio", q, { kind: "music", commercial: true })).filter((r) => !triedMusic.has(r.id)); }
-      catch (e) { const r = await useOriginal(words[0] && FastComposer.MOODS[words[0]] ? words[0] : mood); return { text: `I couldn't reach the music library (${e.message}), so I composed an original ${r.moodName.toLowerCase()} track instead, “${r.title}”. It's yours to use anywhere, no credit needed.`, chips: ["Compose another", "Try finding a song again"] }; }
+      catch (e) { const r = await useOriginal(words[0] && FastComposer.MOODS[words[0]] ? words[0] : mood); return { text: `${intro}I couldn't reach the music library (${e.message}), so I composed an original ${r.moodName.toLowerCase()} track instead, “${r.title}”. It's yours to use anywhere, no credit needed.`, chips: ["Compose another", "Try finding a song again"] }; }
       results.sort((a, b) => Math.abs((a.duration || 0) - need * 1.2) - Math.abs((b.duration || 0) - need * 1.2));
       let lastErr = null;
       for (const it of results.slice(0, 4)) {
@@ -301,17 +355,25 @@
         try {
           await useMusic(it);
           const credit = needsCredit(it.license) ? ` Its license asks you to credit the artist when you post the video; I saved the credit under **Marketplace › Credits**.` : " It's public domain/CC0, so no credit is needed.";
-          return { text: `I searched for “${q}” music and added **“${it.title}”** by ${it.creator} (${licLabel(it.license, it.license_version)}, from ${it.source}, ${fmtDur(it.duration)}). It fades out at the end and dips whenever someone talks.${credit}`,
+          return { text: `${intro}I searched for “${q}” music and added **“${it.title}”** by ${it.creator} (${licLabel(it.license, it.license_version)}, from ${it.source}, ${fmtDur(it.duration)}). It fades out at the end and dips whenever someone talks.${credit}`,
             actions: [{ label: "Browse more music", run: () => open("music") }], chips: ["Find a different song", "Compose original music instead", "Add credits to the end"] };
         } catch (e) { lastErr = e; }
       }
       const r = await useOriginal(mood);
-      return { text: `${results.length ? `The songs I found couldn't be downloaded (${lastErr ? lastErr.message : "no matches"}).` : `I found no “${q}” songs.`} So I composed an original ${r.moodName.toLowerCase()} track instead, “${r.title}”, yours to use anywhere.`, chips: ["Find a different song", "Compose another"] };
+      return { text: `${intro}${results.length ? `The songs I found couldn't be downloaded (${lastErr ? lastErr.message : "no matches"}).` : `I found no “${q}” songs.`} So I composed an original ${r.moodName.toLowerCase()} track instead, “${r.title}”, yours to use anywhere.`, chips: ["Find a different song", "Compose another"] };
+    },
+    async spotifyLike({ text = "" } = {}) {
+      const link = (text.match(SPOTIFY_RE) || [])[1];
+      if (!link) return { text: "Paste a Spotify song link (open.spotify.com/track/…) and I'll find free music that sounds similar." };
+      let d; try { d = await spotifyInfo(link); } catch (e) { return { text: e.message } }
+      const intro = `That's ${spotLine(d)}, ${d.style.label.toLowerCase()}${d.genres.length ? ` (${d.genres.slice(0, 3).join(", ")})` : ""}. Spotify songs can only be played in Spotify, not put into videos, so here's free music in a similar style.\n\n`;
+      const r = await ai.findMusic({ query: d.style.query, mood: d.style.mood, intro });
+      return { ...r, embed: d.embed, chips: ["Find a different one", "Compose one in this style", "Add credits to the end"] };
     },
     async composeMusic({ text = "" } = {}) {
       const w = (text.match(MOOD_WORDS) || []).map((x) => x.toLowerCase().replace("lo-fi", "chill").replace("lofi", "chill"));
       const map = { epic: "cinematic", dramatic: "cinematic", orchestral: "cinematic", sad: "cinematic", emotional: "cinematic", calm: "dreamy", relaxing: "chill", ambient: "dreamy", acoustic: "happy", guitar: "happy", summer: "upbeat", travel: "upbeat", dance: "energetic", electronic: "energetic", rock: "energetic", funky: "upbeat", piano: "dreamy" };
-      let mood = w.map((x) => (FastComposer.MOODS[x] ? x : map[x])).find(Boolean) || FastComposer.moodFor(window.FEVideo && window.FEVideo.frameAnalysis());
+      let mood = w.map((x) => (FastComposer.MOODS[x] ? x : map[x])).find(Boolean) || (lastStyleMood && /\b(this|that|same|similar) (style|vibe|feel)|\blike (it|that|this)\b/i.test(text) ? lastStyleMood : null) || FastComposer.moodFor(window.FEVideo && window.FEVideo.frameAnalysis());
       const r = await useOriginal(mood);
       return { text: `I composed an original **${r.moodName.toLowerCase()}** track, “${r.title}” (${r.bpm} BPM, ${Math.round(r.seconds)} s) to fit your video, and added it as the music. It's yours to use anywhere, no credit needed.`, chips: ["Compose another", "Find a song instead", "Make it calmer"] };
     },

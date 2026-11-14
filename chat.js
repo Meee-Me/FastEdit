@@ -57,6 +57,10 @@
         const img = document.createElement("img"); img.className = "msg-img"; img.alt = reply.imageAlt || "Image made by Fast Edit AI";
         img.src = typeof reply.image === "string" ? reply.image : reply.image.toDataURL("image/jpeg", 0.88); body.append(img);
       }
+      if (reply.embed && /^https:\/\/open\.spotify\.com\/embed\/track\/[A-Za-z0-9]{22}$/.test(reply.embed)) {
+        const f = document.createElement("iframe"); f.className = "msg-embed"; f.src = reply.embed + "?utm_source=generator&theme=0"; f.height = "80"; f.loading = "lazy";
+        f.title = "Spotify player (listening only)"; f.allow = "autoplay; clipboard-write; encrypted-media"; body.append(f);
+      }
       if (reply.actions && reply.actions.length) {
         const row = document.createElement("div"); row.className = "msg-actions";
         for (const a of reply.actions) { const b = document.createElement("button"); b.type = "button"; b.className = "btn sm" + (a.primary ? " primary" : ""); b.textContent = a.label; b.onclick = () => a.run(); row.append(b); }
@@ -97,9 +101,9 @@
         case "make_poster": return await cfg.makePoster(r.topic, text);
         case "make_thumbnail": return await cfg.makeThumbnail(r.topic, text);
         case "auto_edit": return await cfg.autoEdit(r.topic, r.secs, text);
-        case "find_music": case "compose_music": case "find_photo": case "find_sound": case "open_market": case "add_credits": {
+        case "spotify_like": case "find_music": case "compose_music": case "find_photo": case "find_sound": case "open_market": case "add_credits": {
           const M = window.FEMarket; if (!M) return { text: "The Marketplace isn't loaded yet. Try again in a moment." };
-          const fn = { find_music: "findMusic", compose_music: "composeMusic", find_photo: "findPhoto", find_sound: "findSound", open_market: "openMarket", add_credits: "addCredits" }[r.kind];
+          const fn = { spotify_like: "spotifyLike", find_music: "findMusic", compose_music: "composeMusic", find_photo: "findPhoto", find_sound: "findSound", open_market: "openMarket", add_credits: "addCredits" }[r.kind];
           try { return await M.ai[fn]({ text, again: r.again }); } catch (e) { console.error(e); return { text: "That didn't work: " + (e && e.message ? e.message : "unknown error") + "." }; }
         }
         default: {
