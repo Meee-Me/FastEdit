@@ -169,7 +169,7 @@
       const local = t - sd.start, inRange = local >= 0 && local < m.duration - 0.03;
       if (playing && inRange) { if (m.el.paused) { m.el.currentTime = local; m.el.play().catch(() => {}); } else if (Math.abs(m.el.currentTime - local) > 0.3) m.el.currentTime = local; }
       else if (!m.el.paused) m.el.pause();
-      if (m.mgain) m.mgain.gain.value = sd.vol; else m.el.volume = clamp(sd.vol, 0, 1);
+      const v = m.unlocking ? 0 : sd.vol; if (m.mgain) m.mgain.gain.value = v; else m.el.volume = clamp(v, 0, 1);
     }
   }
   function syncMusic(t, playing) {
@@ -186,8 +186,25 @@
     let g = V.music.vol;
     const T = total(); if (T - t < 1.5) g *= clamp((T - t) / 1.5, 0, 1);
     if (V.music.duck && speechAt(t)) g *= 0.25;
+    if (m.unlocking) g = 0;
     if (m.mgain) m.mgain.gain.setTargetAtTime(g, AC.currentTime, 0.12); else m.el.volume = clamp(g, 0, 1);
   }
+  // iPhone/iPad Safari only lets a sound start later if it was first started during a tap. Music and
+  // sound effects begin mid-playback (after loading), so on any tap each one is started silently once.
+  function unlockAudio() {
+    if (AC && AC.state === "suspended") AC.resume().catch(() => {});
+    for (const m of V.media) {
+      if (m.kind !== "audio" || m.unlocked || !m.el || !m.el.paused) continue;
+      m.unlocked = m.unlocking = true;
+      if (m.mgain) m.mgain.gain.value = 0; else m.el.volume = 0;
+      let pr; try { pr = m.el.play(); } catch {}
+      const done = () => { m.el.pause(); m.unlocking = false; };
+      if (pr && pr.then) pr.then(done, () => { m.unlocked = m.unlocking = false; }); else done();
+    }
+  }
+  document.addEventListener("pointerdown", unlockAudio, true);
+  document.addEventListener("touchend", unlockAudio, true);
+  document.addEventListener("keydown", unlockAudio, true);
   function connectMedia(m) {
     if (m.kind !== "video" || m.node || !AC) return;
     try { m.node = AC.createMediaElementSource(m.el); m.gain = AC.createGain(); m.gain.connect(monitor); m.gain.connect(recDest); rebuildChain(m); } catch {}
@@ -541,7 +558,7 @@
   }
   async function play() {
     if (!V.clips.length || P.playing) return;
-    ensureAudio();
+    ensureAudio(); unlockAudio();
     if (P.t >= total() - 0.02) P.t = 0;
     P.playing = true; setPlayBtn();
     await startClipAt(P.t);
