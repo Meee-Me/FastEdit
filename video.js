@@ -1058,6 +1058,9 @@
   async function exactExport(W, H) {
     const T = total(), N = Math.max(1, Math.round(T * FPS));
     const vc = await pickVideoCodec(W, H); if (!vc) throw new Error("This browser can't encode video frame by frame. Choose Real time instead.");
+    // Safari (iPhone/iPad) can encode video frame by frame but often not sound: record in real time so the music is kept
+    const hasSound = !!V.music || V.sounds.length > 0 || (!V.muted && usedMedia().some((m) => m.kind === "video"));
+    if (hasSound && !(await pickAudioCodec())) { FE.toast("This browser can't add sound frame by frame, so I'm recording in real time to keep the music. Keep this tab open."); return startExport(); }
     pause();
     OFF = { cancelled: false };
     $("#vExporting").hidden = false; $("#vExport").hidden = true; $("#vCancel").hidden = false; $("#vExpResult").textContent = ""; document.body.classList.add("v-exporting");

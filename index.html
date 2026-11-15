@@ -736,6 +736,10 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
 <div id="toast" hidden></div>
 
 <script src="https://deluxe-main.vercel.app/deluxe.js" data-app="edit"></script>
+<script>
+  // iPhone/iPad: let the editor's sound play even when the ring/silent switch is on (Safari 16.4+)
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}
+</script>
 <script src="fastai.js"></script>
 <script src="tone.js"></script>
 <script src="chat.js"></script>
