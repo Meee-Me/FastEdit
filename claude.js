@@ -23,11 +23,11 @@
   let useKey = store.get("fastedit.claude.usekey") === "1" && !!apiKey;
   const chatActive = () => useKey && !!apiKey;
   const BRAND_MCP = { name: "Claude", status: "Connected · editing with you", foot: "Claude is connected. Typing here uses Fast Edit's built-in helper; Claude edits from its own chat.", placeholder: "Ask Claude in claude.ai, or type an edit here…",
-    welcome: "Ask Claude (in claude.ai) to edit your work, and I'll show what it does here. You can also type an edit here." };
+    welcome: "Claude is connected. Ask Claude (in claude.ai) to edit your work, and I'll show what it does here. You can also type an edit here." };
   const BRAND_KEY = { name: "Claude", status: "Claude · using your API key", foot: "Claude answers here. Your messages and a small screenshot of your work go to Anthropic, using your own API key.", placeholder: "Ask Claude…",
     welcome: "Ask Claude anything about your work, or tell Claude what to change. Claude can see it and edit it with you: ask for ideas, an honest opinion, or a finished edit. What should we do?" };
   function brand() {
-    const b = chatActive() ? BRAND_KEY : on && seen ? BRAND_MCP : null;
+    const b = chatActive() ? BRAND_KEY : on ? BRAND_MCP : null;
     document.body.classList.toggle("claude-on", !!b);
     for (const m of ["photo", "video"]) { const c = window.FEChat && window.FEChat.get(m); if (c && c.setBrand) c.setBrand(b); }
   }
