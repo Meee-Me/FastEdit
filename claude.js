@@ -1,8 +1,8 @@
 /*
- * Fast Edit <-> Claude. "Claude" button: shows a private connector link to add in
- * Claude (Settings > Connectors > Add custom connector). While it's on, this tab checks a
- * small relay (Supabase) for commands from Claude, runs them here and sends back a reply and
- * a screenshot. Your photos and videos stay in this browser; only the screenshot Claude asks for
+ * Fast Edit <-> AI (Claude, ChatGPT, others). "Connect AI" button: (1) an AI answers in the chat panel
+ * using the user's own API key; (2) a private connector link (MCP) lets an AI app edit this tab. While
+ * the link is on, this tab checks a small relay (Supabase) for commands, runs them here and sends
+ * back a reply and a screenshot. Your photos and videos stay in this browser; only the screenshot Claude asks for
  * (a small JPEG) is sent.
  */
 (function () {
@@ -19,17 +19,45 @@
   let on = store.get("fastedit.claude.on") === "1";
   let lastCall = null, lastErr = null, polling = false, timer = null, busy = false;
   let seen = store.get("fastedit.claude.seen") === code;
-  let apiKey = store.get("fastedit.claude.key") || "";
-  let useKey = store.get("fastedit.claude.usekey") === "1" && !!apiKey;
-  const chatActive = () => useKey && !!apiKey;
-  const BRAND_MCP = { name: "Claude", status: "Connected · editing with you", foot: "Claude is connected. Typing here uses Fast Edit's built-in helper; Claude edits from its own chat.", placeholder: "Ask Claude in claude.ai, or type an edit here…",
-    welcome: "Claude is connected. Ask Claude (in claude.ai) to edit your work, and I'll show what it does here. You can also type an edit here." };
-  const BRAND_KEY = { name: "Claude", status: "Claude · using your API key", foot: "Claude answers here. Your messages and a small screenshot of your work go to Anthropic, using your own API key.", placeholder: "Ask Claude…",
-    welcome: "Ask Claude anything about your work, or tell Claude what to change. Claude can see it and edit it with you: ask for ideas, an honest opinion, or a finished edit. What should we do?" };
+  // Which AI answers in the chat panel (needs that AI's own API key), and which AI app uses the private link
+  const PROV = {
+    claude: { name: "Claude", vendor: "Anthropic", site: "console.anthropic.com", keyOk: (k) => /^sk-ant-[A-Za-z0-9_-]{20,}$/.test(k), keyHint: "sk-ant-…" },
+    chatgpt: { name: "ChatGPT", vendor: "OpenAI", site: "platform.openai.com", base: "https://api.openai.com/v1", model: "gpt-5", keyOk: (k) => /^sk-[A-Za-z0-9_-]{20,}$/.test(k), keyHint: "sk-…" },
+    other: { name: "AI", vendor: "the AI service", keyOk: (k) => k.length >= 8, keyHint: "API key" },
+  };
+  const getf = (p, k) => store.get(`fastedit.ai.${p}.${k}`) || "", setf = (p, k, v) => store.set(`fastedit.ai.${p}.${k}`, v);
+  const keyOf = (p) => getf(p, "key");
+  { const old = store.get("fastedit.claude.key"); // earlier versions stored a Claude key here
+    if (old && !keyOf("claude")) { setf("claude", "key", old); if (store.get("fastedit.claude.usekey") === "1") store.set("fastedit.ai.active", "claude"); }
+    store.del("fastedit.claude.key"); store.del("fastedit.claude.usekey"); }
+  let prov = PROV[store.get("fastedit.ai.prov")] ? store.get("fastedit.ai.prov") : "claude";
+  let active = store.get("fastedit.ai.active") || ""; if (!PROV[active] || !keyOf(active)) active = "";
+  let mcpAgent = PROV[store.get("fastedit.mcp.agent")] ? store.get("fastedit.mcp.agent") : "claude";
+  const nameOf = (p) => (p === "other" ? getf("other", "name") || "AI" : PROV[p].name);
+  const baseOf = (p) => (p === "chatgpt" ? window.__FE_OPENAI_BASE || PROV.chatgpt.base : getf(p, "base")).replace(/\/+$/, "");
+  const modelOf = (p) => getf(p, "model") || PROV[p].model || "";
+  const vendorOf = (p) => { if (p !== "other") return PROV[p].vendor; try { return new URL(baseOf(p)).hostname; } catch { return PROV.other.vendor; } };
+  const chatActive = () => !!active && !!keyOf(active);
+  const nm = () => nameOf(chatActive() ? active : mcpAgent);
+  const appOf = (p) => (p === "claude" ? "claude.ai" : p === "chatgpt" ? "chatgpt.com" : "its app");
+  function brandFor() {
+    if (chatActive()) {
+      const n = nameOf(active);
+      return { name: n, status: `${n} · using your API key`, foot: `${n} answers here. Your messages and a small screenshot of your work go to ${vendorOf(active)}, using your own API key.`, placeholder: `Ask ${n}…`,
+        welcome: `Ask ${n} anything about your work, or tell ${n} what to change. ${n} can see it and edit it with you: ask for ideas, an honest opinion, or a finished edit. What should we do?` };
+    }
+    if (on) {
+      const n = nameOf(mcpAgent);
+      return { name: n, status: "Connected · editing with you", foot: `${n} is connected. Typing here uses Fast Edit's built-in helper; ${n} edits from its own chat.`, placeholder: `Ask ${n} in ${appOf(mcpAgent)}, or type an edit here…`,
+        welcome: `${n} is connected. Ask ${n} (in ${appOf(mcpAgent)}) to edit your work, and I'll show what it does here. You can also type an edit here.` };
+    }
+    return null;
+  }
   function brand() {
-    const b = chatActive() ? BRAND_KEY : on ? BRAND_MCP : null;
+    const b = brandFor();
     document.body.classList.toggle("claude-on", !!b);
     for (const m of ["photo", "video"]) { const c = window.FEChat && window.FEChat.get(m); if (c && c.setBrand) c.setBrand(b); }
+    updateBtn();
   }
   const chatOf = () => window.FEChat.get(mode());
   let keyErr = ""; const hist = { photo: [], video: [] };
@@ -81,17 +109,17 @@
   }
   async function run(tool, args) {
     if (tool === "look") {
-      chatOf().note("Claude looked at your " + (mode() === "video" ? "video" : "photo"));
+      chatOf().note(nm() + " looked at your " + (mode() === "video" ? "video" : "photo"));
       if (mode() === "video" && Number.isFinite(args.at) && window.FEVideo.V.clips.length) { await window.FEVideo.seek(Math.max(0, Math.min(args.at, window.FEVideo.total() - 0.05))); await sleep(300); }
       return { text: describe(), image: shot() };
     }
-    if (tool === "do") { const text = await chatSend(String(args.request || ""), "Claude"); return { text: `${text || "Done."}\n\n${describe()}`, image: shot() }; }
+    if (tool === "do") { const text = await chatSend(String(args.request || ""), nm()); return { text: `${text || "Done."}\n\n${describe()}`, image: shot() }; }
     if (tool === "undo") {
-      const m = mode(), api = window.FEChat.get(m); const ok = api && api.cfg.undo(); api.note(ok ? "Claude undid the last change" : "Claude tried to undo, but there was nothing to undo");
+      const m = mode(), api = window.FEChat.get(m); const ok = api && api.cfg.undo(); api.note(ok ? nm() + " undid the last change" : nm() + " tried to undo, but there was nothing to undo");
       await sleep(200); return { text: (ok ? "Undid the last change. " : "Nothing to undo. ") + describe(), image: shot() };
     }
     if (tool === "mode") {
-      if (args.mode !== mode()) { $(`[data-app-mode="${args.mode}"]`).click(); await sleep(500); chatOf().note("Claude switched to " + args.mode + " mode"); }
+      if (args.mode !== mode()) { $(`[data-app-mode="${args.mode}"]`).click(); await sleep(500); chatOf().note(nm() + " switched to " + args.mode + " mode"); }
       return { text: `Now in ${mode()} mode. ${describe()}`, image: shot() };
     }
     return { error: true, text: "That command isn't supported by this version of Fast Edit." };
@@ -103,22 +131,22 @@
       lastErr = null;
       for (const c of cmds) {
         if (!seen) { seen = true; store.set("fastedit.claude.seen", code); brand(); }
-        busy = true; render();
+        busy = true; refreshStatus();
         let res;
         try { res = await run(c.tool, c.args || {}); lastCall = { tool: c.tool, at: Date.now() }; }
         catch (e) { res = { error: true, text: `Fast Edit couldn't do that: ${e && e.message ? e.message : "unknown error"}` }; }
-        try { await rpc("fe_done", { p_session: code, p_id: c.id, p_result: res }); } catch (e) { lastErr = "Couldn't send the result to Claude."; }
+        try { await rpc("fe_done", { p_session: code, p_id: c.id, p_result: res }); } catch (e) { lastErr = `Couldn't send the result to ${nm()}.`; }
         busy = false;
       }
     } catch (e) { lastErr = "Can't reach the connection service."; }
-    polling = false; render();
+    polling = false; refreshStatus();
   }
   function start() { stop(); if (!on) return; tick(); timer = setInterval(tick, document.hidden ? 4000 : 1500); }
   function stop() { if (timer) clearInterval(timer); timer = null; }
   document.addEventListener("visibilitychange", () => { if (on) start(); });
-  function setOn(v) { on = v; store.set("fastedit.claude.on", v ? "1" : "0"); if (v) start(); else stop(); brand(); render(); updateBtn(); }
+  function setOn(v) { on = v; store.set("fastedit.claude.on", v ? "1" : "0"); if (v) start(); else stop(); brand(); render(); }
 
-  /* ---------- Claude answers in the chat panel (your own API key, from this browser) ---------- */
+  /* ---------- an AI answers in the chat panel (your own API key, from this browser) ---------- */
   let sdkP = null;
   const loadSDK = () => (sdkP ||= new Promise((res, rej) => {
     if (window.Anthropic) return res(window.Anthropic);
@@ -126,7 +154,7 @@
     s.onload = () => res(window.Anthropic); s.onerror = () => { sdkP = null; rej(new Error("Couldn't load the Claude library. Check your connection.")); }; document.head.append(s);
   }));
   const MODEL = "claude-opus-5-5";
-  const SYSTEM = `You are Claude, chatting with the user inside Fast Edit, a photo and video editor in their browser. The user talks to you in the editor's side panel and sees your replies there.
+  const SYSTEM = (n) => `You are ${n}, chatting with the user inside Fast Edit, a photo and video editor in their browser. The user talks to you in the editor's side panel and sees your replies there.
 
 You can see their work and change it with tools:
 - fastedit_look: a screenshot of the photo or the current video frame, plus what's open. Each user message already includes one; call it again after changes to check the result, or (video) to look at another moment.
@@ -160,18 +188,18 @@ Chat like a helpful, direct person: answer questions, give honest opinions about
     }
     return { text: "Unknown tool.", error: true };
   }
-  const NOTES = { fastedit_do: (a) => `Claude: ${String(a.request || "").slice(0, 80)}` }; // look, undo and mode add their own notes
+  const NOTES = { fastedit_do: (a) => `${nm()}: ${String(a.request || "").slice(0, 80)}` }; // look, undo and mode add their own notes
   function keyProblem(e, Anthropic) {
-    if (e instanceof Anthropic.AuthenticationError) return "Anthropic didn't accept that API key. Open **Claude** at the top, remove the key and add a valid one.";
+    if (e instanceof Anthropic.AuthenticationError) return "Anthropic didn't accept that API key. Open **Connect AI** at the top, remove the key and add a valid one.";
     if (e instanceof Anthropic.PermissionDeniedError) return "That API key isn't allowed to use this model. Check the key's access in console.anthropic.com.";
     if (e instanceof Anthropic.RateLimitError) return "Anthropic is rate-limiting this key right now. Wait a minute and try again.";
     if (e instanceof Anthropic.APIConnectionError) return "Couldn't reach Anthropic. Check your connection and try again.";
     if (e instanceof Anthropic.APIError) return /credit|billing|balance/i.test(e.message) ? "Your Anthropic account is out of credit. Add some in console.anthropic.com → Billing." : `Anthropic returned an error (${e.status}): ${e.message}`;
     return "Something went wrong: " + (e && e.message ? e.message : "unknown error");
   }
-  async function chat(text, c, m) {
+  async function claudeChat(text, c, m) {
     let Anthropic; try { Anthropic = await loadSDK(); } catch (e) { return { text: e.message }; }
-    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true, ...(window.__FE_CLAUDE_BASE ? { baseURL: window.__FE_CLAUDE_BASE } : {}) });
+    const client = new Anthropic({ apiKey: keyOf("claude"), dangerouslyAllowBrowser: true, ...(window.__FE_CLAUDE_BASE ? { baseURL: window.__FE_CLAUDE_BASE } : {}) });
     const msgs = hist[m]; stripImages(msgs); const mark = msgs.length;
     const first = shot(768);
     msgs.push({ role: "user", content: [...(first ? [imgBlock(first)] : []), { type: "text", text: `${text}\n\n[Editor now: ${describe()}]` }] });
@@ -180,7 +208,7 @@ Chat like a helpful, direct person: answer questions, give honest opinions about
     try {
       for (let i = 0; i < 10; i++) {
         let resp;
-        try { resp = await create({ model: MODEL, max_tokens: 4096, system: SYSTEM, tools: TOOLS, thinking: { type: "adaptive" }, output_config: { effort: "medium" }, messages: msgs }); }
+        try { resp = await create({ model: MODEL, max_tokens: 4096, system: SYSTEM(nameOf("claude")), tools: TOOLS, thinking: { type: "adaptive" }, output_config: { effort: "medium" }, messages: msgs }); }
         catch (e) { if (fallbacks && e instanceof Anthropic.BadRequestError && /beta|fallback/i.test(e.message)) { fallbacks = false; i--; continue; } throw e; }
         msgs.push({ role: "assistant", content: resp.content });
         const say = resp.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
@@ -203,59 +231,149 @@ Chat like a helpful, direct person: answer questions, give honest opinions about
     return { text: out, ...(img ? { image: "data:image/jpeg;base64," + img, imageAlt: "How it looks now" } : {}) };
   }
 
+  // ChatGPT (OpenAI) and any service that speaks the same chat format (Gemini, Groq, OpenRouter, Mistral, ...)
+  function stripOAImages(msgs) {
+    for (const m of msgs) if (m.role === "user" && Array.isArray(m.content)) { m.content = m.content.filter((b) => b.type !== "image_url"); if (!m.content.length) m.content = [{ type: "text", text: "(screenshot omitted)" }]; }
+  }
+  async function oaError(res, p) {
+    let msg = ""; try { const j = await res.json(); msg = (j.error && (j.error.message || j.error)) || j.message || ""; if (Array.isArray(j) && j[0] && j[0].error) msg = j[0].error.message; } catch {}
+    msg = String(msg);
+    const v = vendorOf(p), n = nameOf(p);
+    if (res.status === 401 || res.status === 403) return `${v} didn't accept that API key. Open **Connect AI** at the top, remove the key and add a valid one.`;
+    if (res.status === 404) return `${v} says it doesn't have the model “${modelOf(p)}”. Open **Connect AI** and change the model name.`;
+    if (res.status === 429) return /quota|credit|billing|balance/i.test(msg) ? `Your ${v} account is out of credit. Add some on its billing page.` : `${v} is rate-limiting this key right now. Wait a minute and try again.`;
+    return `${n} returned an error (${res.status})${msg ? ": " + msg.slice(0, 300) : ""}`;
+  }
+  async function openaiChat(p, text, c, m) {
+    const base = baseOf(p), model = modelOf(p), n = nameOf(p);
+    if (!/^https:\/\//.test(base) && !/^http:\/\/localhost/.test(base)) return { text: `Open **Connect AI** and enter ${n}'s website address (it starts with https://).` };
+    if (!model) return { text: `Open **Connect AI** and enter the model name to use for ${n}.` };
+    const msgs = hist[m]; stripOAImages(msgs); const mark = msgs.length;
+    const first = shot(768);
+    msgs.push({ role: "user", content: [{ type: "text", text: `${text}\n\n[Editor now: ${describe()}]` }, ...(first ? [{ type: "image_url", image_url: { url: "data:image/jpeg;base64," + first } }] : [])] });
+    const tools = TOOLS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.input_schema } }));
+    let edited = false, out = "";
+    try {
+      for (let i = 0; i < 10; i++) {
+        let res;
+        try { res = await fetch(base + "/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + keyOf(p) }, body: JSON.stringify({ model, messages: [{ role: "system", content: SYSTEM(n) }, ...msgs], tools }) }); }
+        catch { throw new Error(`Couldn't reach ${vendorOf(p)}. Check your connection. (Some AI services don't allow calls straight from a web page.)`); }
+        if (!res.ok) throw new Error(await oaError(res, p));
+        const data = await res.json(), ch = data.choices && data.choices[0], msg = ch && ch.message;
+        if (!msg) throw new Error(`${n} sent back an empty reply.`);
+        const say = (typeof msg.content === "string" ? msg.content : Array.isArray(msg.content) ? msg.content.map((x) => x.text || "").join("") : "").trim();
+        const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+        msgs.push({ role: "assistant", content: say || null, ...(calls.length ? { tool_calls: calls } : {}) });
+        if (!calls.length) { out = say || "Done."; if (ch.finish_reason === "length") out += "\n\n(I ran out of room for that reply. Ask me to continue.)"; break; }
+        let lastImg = null;
+        for (const tc of calls) {
+          let args = {}; try { args = JSON.parse((tc.function && tc.function.arguments) || "{}"); } catch {}
+          const name = tc.function && tc.function.name, cc = window.FEChat.get(mode()) || c;
+          if (NOTES[name]) cc.note(NOTES[name](args));
+          let r; try { r = await localTool(name, args, cc); } catch (e) { r = { text: `That failed: ${e && e.message ? e.message : "unknown error"}`, error: true }; }
+          if (name === "fastedit_do" || name === "fastedit_undo") edited = true;
+          msgs.push({ role: "tool", tool_call_id: tc.id, content: (r.error ? "Error: " : "") + (r.text || "Done.") });
+          if (r.image) lastImg = r.image;
+        }
+        if (lastImg) msgs.push({ role: "user", content: [{ type: "text", text: "Screenshot of the editor after that:" }, { type: "image_url", image_url: { url: "data:image/jpeg;base64," + lastImg } }] });
+        if (i === 9) out = say || "I stopped after several steps. Tell me if you want me to keep going.";
+      }
+    } catch (e) { msgs.length = mark; console.error(e); return { text: e && e.message ? e.message : "Something went wrong." }; }
+    const img = edited ? shot(720) : null;
+    return { text: out, ...(img ? { image: "data:image/jpeg;base64," + img, imageAlt: "How it looks now" } : {}) };
+  }
+  const chat = (text, c, m) => (active === "claude" ? claudeChat(text, c, m) : openaiChat(active, text, c, m));
+
   /* ---------- UI ---------- */
   document.body.insertAdjacentHTML("beforeend", `
     <div class="mkt" id="clm" hidden role="dialog" aria-modal="true" aria-labelledby="clmTitle">
       <div class="mkt-panel clm-panel">
-        <div class="mkt-head"><h2 id="clmTitle">Connect Claude</h2><button class="btn sm ghost" id="clmClose" aria-label="Close" style="margin-left:auto">✕</button></div>
+        <div class="mkt-head"><h2 id="clmTitle">Connect an AI</h2><button class="btn sm ghost" id="clmClose" aria-label="Close" style="margin-left:auto">✕</button></div>
         <div class="mkt-body" id="clmBody"></div>
       </div>
     </div>`);
   const dlg = $("#clm");
+  const statusInfo = () => { const n = nameOf(mcpAgent); return !on ? ["off", "Off"] : lastErr ? ["err", lastErr] : busy ? ["busy", `${n} is editing…`] : ["on", lastCall ? `Connected · ${n} last used “${lastCall.tool}” ${Math.max(0, Math.round((Date.now() - lastCall.at) / 1000))}s ago` : `Connected · waiting for ${n}`]; };
+  function refreshStatus() { const el = $("#clmStatus"); if (!el || dlg.hidden) return; const s = statusInfo(); el.className = "clm-status " + s[0]; el.textContent = s[1]; }
+  const STEPS = {
+    claude: ["In Claude, open <b>Settings → Connectors → Add custom connector</b>. Name it “Fast Edit”, paste the link, and add it.", "In a Claude chat, turn the connector on and ask, e.g. “Look at my photo in Fast Edit and make it look like a movie poster.”"],
+    chatgpt: ["In ChatGPT, open <b>Settings → Connectors → Advanced</b> and turn on <b>Developer mode</b> (it's only on some plans), then choose <b>Create</b>. Name it “Fast Edit”, paste the link, and pick <b>No authentication</b>.", "In a ChatGPT chat, add the Fast Edit connector (Developer mode in the + menu) and ask, e.g. “Look at my photo in Fast Edit and make it look like a movie poster.”"],
+    other: ["In any AI app that supports <b>MCP</b> connectors over the web (a “remote MCP server”), add a new one. Name it “Fast Edit”, paste the link, and choose no authentication.", "Then ask it, e.g. “Look at my photo in Fast Edit and make it look like a movie poster.”"],
+  };
   function render() {
     const b = $("#clmBody"); if (!b || dlg.hidden) return;
+    const P = PROV[prov], n = nameOf(prov), has = !!keyOf(prov), mn = nameOf(mcpAgent);
     const keyMsg = keyErr ? `<span class="clm-status err">${esc(keyErr)}</span>` : "";
-    const status = !on ? ["off", "Off"] : lastErr ? ["err", lastErr] : busy ? ["busy", "Claude is editing…"] : ["on", lastCall ? `Connected · Claude last used “${lastCall.tool}” ${Math.max(0, Math.round((Date.now() - lastCall.at) / 1000))}s ago` : "Connected · waiting for Claude"];
+    const opt = (id, cur) => ["claude", "chatgpt", "other"].map((p) => `<option value="${p}" ${p === cur ? "selected" : ""}>${p === "other" ? "Another AI (Gemini, Groq, …)" : PROV[p].name}</option>`).join("");
+    const hint = prov === "claude" ? `Needs a Claude API key from <b>console.anthropic.com</b>.` : prov === "chatgpt" ? `Needs an OpenAI API key from <b>platform.openai.com</b>.`
+      : `Works with any AI service that uses OpenAI's chat format, such as Google Gemini (address <code>https://generativelanguage.googleapis.com/v1beta/openai</code>), Groq, OpenRouter or Mistral. Use a model that can see images and use tools, and a service that allows calls from a web page.`;
+    const fields = prov === "chatgpt" ? `<div class="clm-field"><label for="clmModel">Model</label><input id="clmModel" value="${esc(modelOf("chatgpt"))}" placeholder="${esc(PROV.chatgpt.model)}" autocomplete="off" list="clmModels"><datalist id="clmModels"></datalist></div>`
+      : prov === "other" ? `<div class="clm-field"><label for="clmName">Name</label><input id="clmName" value="${esc(getf("other", "name"))}" placeholder="Gemini" autocomplete="off"></div>
+        <div class="clm-field"><label for="clmBase">Website address</label><input id="clmBase" value="${esc(getf("other", "base"))}" placeholder="https://…/v1" autocomplete="off" inputmode="url"></div>
+        <div class="clm-field"><label for="clmModel">Model</label><input id="clmModel" value="${esc(getf("other", "model"))}" placeholder="model name" autocomplete="off"></div>` : "";
     b.innerHTML = `
-      <p class="clm-lead">Let <b>Claude</b> see and edit your work in Fast Edit. Claude looks at your photo or video frame and tells Fast Edit AI what to do, like “make it warmer” or “cut it to 15 seconds”.</p>
-      <div class="label">Chat with Claude right here</div>
-      <p class="hint" style="margin-top:0">Replaces Fast Edit AI in the chat panel with Claude itself. It needs a Claude API key from <b>console.anthropic.com</b> (a separate account from claude.ai; every message is billed to it). The key stays in this browser and goes only to Anthropic. Your messages and a small screenshot of your work are sent when you chat.</p>
-      ${apiKey ? `<div class="clm-row"><label class="check"><input type="checkbox" id="clmUseKey" ${useKey ? "checked" : ""}> Claude answers in the chat panel</label><button class="btn sm" id="clmKeyDel">Remove key</button></div>${keyMsg}`
-        : `<div class="clm-link"><input type="password" id="clmKey" placeholder="Paste your API key (sk-ant-…)" autocomplete="off" aria-label="Claude API key"><button class="btn sm primary" id="clmKeySave">Save</button></div>${keyMsg}`}
-      <div class="label">Or: let Claude in claude.ai edit this tab</div>
-      <p class="hint" style="margin-top:0">Add this private link in Claude. Claude then edits from its own chat, and the panel here shows what it does.</p>
-      <div class="clm-row"><label class="check"><input type="checkbox" id="clmOn" ${on ? "checked" : ""}> Allow Claude to use this tab</label><span class="clm-status ${status[0]}">${esc(status[1])}</span></div>
+      <p class="clm-lead">Connect an <b>AI</b> to Fast Edit. It looks at your photo or video frame and edits it with you: tell it “make it warmer” or “cut it to 15 seconds”.</p>
+      <div class="label">1. Chat with an AI right here</div>
+      <p class="hint" style="margin-top:0">Replaces Fast Edit AI in the chat panel. ${hint} The key is for that service's own account (a subscription like ChatGPT Plus or claude.ai doesn't include it, and every message is billed to the account). The key stays in this browser and goes only to ${esc(vendorOf(prov))}, along with your messages and a small screenshot of your work.</p>
+      <div class="clm-field"><label for="clmProv">AI</label><select id="clmProv">${opt("p", prov)}</select></div>
+      ${fields}
+      ${has ? `<div class="clm-row"><label class="check"><input type="checkbox" id="clmUseKey" ${active === prov ? "checked" : ""}> ${esc(n)} answers in the chat panel</label><button class="btn sm" id="clmKeyDel">Remove key</button></div>${keyMsg}`
+        : `<div class="clm-link"><input type="password" id="clmKey" placeholder="Paste your API key (${esc(P.keyHint)})" autocomplete="off" aria-label="${esc(n)} API key"><button class="btn sm primary" id="clmKeySave">Save</button></div>${keyMsg}`}
+      <div class="label" style="margin-top:18px">2. Or: let an AI app edit this tab (private link)</div>
+      <div class="clm-field"><label for="clmAgent">AI app</label><select id="clmAgent">${opt("a", mcpAgent)}</select></div>
+      <div class="clm-row"><label class="check"><input type="checkbox" id="clmOn" ${on ? "checked" : ""}> Allow ${esc(mn)} to use this tab</label><span id="clmStatus" class="clm-status ${statusInfo()[0]}">${esc(statusInfo()[1])}</span></div>
       <div class="label">Your private connector link</div>
       <div class="clm-link"><input readonly id="clmLink" value="${esc(link())}" aria-label="Connector link"><button class="btn sm primary" id="clmCopy">Copy</button></div>
       <ol class="clm-steps">
-        <li>Turn on <b>Allow Claude to use this tab</b> above.</li>
-        <li>Tap <b>Copy</b>.</li>
-        <li>In Claude, open <b>Settings → Connectors → Add custom connector</b>. Name it “Fast Edit”, paste the link, and add it.</li>
-        <li>In a Claude chat, turn the connector on and ask, e.g. “Look at my photo in Fast Edit and make it look like a movie poster.”</li>
+        <li>Turn on <b>Allow ${esc(mn)} to use this tab</b> above, then tap <b>Copy</b>.</li>
+        ${STEPS[mcpAgent].map((t) => `<li>${t}</li>`).join("")}
       </ol>
-      <p class="hint">Keep this tab open while Claude works: it can only act while Fast Edit is open here. Your files stay in this browser. Claude only gets the small screenshots and replies it asks for.</p>
+      <p class="hint">Keep this tab open while ${esc(mn)} works: it can only act while Fast Edit is open here. Your files stay in this browser. ${esc(mn)} only gets the small screenshots and replies it asks for.</p>
       <p class="hint"><b>Treat the link like a password.</b> Anyone who has it can edit this tab while it's connected.</p>
-      <div class="btnrow"><button class="btn sm" id="clmNew">Make a new link</button><span class="hint">This disconnects Claude until you add the new link.</span></div>`;
+      <div class="btnrow"><button class="btn sm" id="clmNew">Make a new link</button><span class="hint">This disconnects the AI until you add the new link.</span></div>`;
+    $("#clmProv").onchange = (e) => { prov = e.target.value; store.set("fastedit.ai.prov", prov); keyErr = ""; render(); };
+    $("#clmAgent").onchange = (e) => { mcpAgent = e.target.value; store.set("fastedit.mcp.agent", mcpAgent); brand(); render(); };
+    for (const [id, k] of [["#clmModel", "model"], ["#clmName", "name"], ["#clmBase", "base"]]) { const el = $(id); if (el) el.onchange = () => { setf(prov, k, el.value.trim()); if (active === prov) brand(); }; }
+    if (prov === "chatgpt" && has) loadModels();
     $("#clmOn").onchange = (e) => setOn(e.target.checked);
     const ks = $("#clmKeySave");
-    if (ks) ks.onclick = () => { const v = $("#clmKey").value.trim(); if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(v)) { keyErr = "That doesn't look like a Claude API key (it starts with sk-ant-)."; return render(); } keyErr = ""; apiKey = v; store.set("fastedit.claude.key", v); useKey = true; store.set("fastedit.claude.usekey", "1"); brand(); noteAll("Claude now answers in this panel"); render(); };
-    const uk = $("#clmUseKey"); if (uk) uk.onchange = (e) => { useKey = e.target.checked; store.set("fastedit.claude.usekey", useKey ? "1" : "0"); brand(); noteAll(useKey ? "Claude now answers in this panel" : "Fast Edit AI answers in this panel again"); render(); };
-    const kd = $("#clmKeyDel"); if (kd) kd.onclick = () => { apiKey = ""; useKey = false; store.del("fastedit.claude.key"); store.del("fastedit.claude.usekey"); hist.photo = []; hist.video = []; keyErr = ""; brand(); render(); FE.toast("Key removed from this browser"); };
+    if (ks) ks.onclick = () => {
+      const v = $("#clmKey").value.trim();
+      if (!P.keyOk(v)) { keyErr = prov === "claude" ? "That doesn't look like a Claude API key (it starts with sk-ant-)." : prov === "chatgpt" ? "That doesn't look like an OpenAI API key (it starts with sk-)." : "Paste the API key from that service."; return render(); }
+      if (prov === "other" && (!/^(https:\/\/|http:\/\/localhost)/.test(getf("other", "base")) || !modelOf("other"))) { keyErr = "Fill in the website address (starting with https://) and the model first."; return render(); }
+      keyErr = ""; setf(prov, "key", v); active = prov; store.set("fastedit.ai.active", active); hist.photo = []; hist.video = []; brand(); noteAll(`${nameOf(prov)} now answers in this panel`); render();
+    };
+    const uk = $("#clmUseKey");
+    if (uk) uk.onchange = (e) => { active = e.target.checked ? prov : active === prov ? "" : active; store.set("fastedit.ai.active", active); hist.photo = []; hist.video = []; brand(); noteAll(active ? `${nameOf(active)} now answers in this panel` : "Fast Edit AI answers in this panel again"); render(); };
+    const kd = $("#clmKeyDel");
+    if (kd) kd.onclick = () => { store.del(`fastedit.ai.${prov}.key`); if (active === prov) { active = ""; store.set("fastedit.ai.active", ""); } hist.photo = []; hist.video = []; keyErr = ""; brand(); render(); FE.toast("Key removed from this browser"); };
     $("#clmCopy").onclick = async () => { try { await navigator.clipboard.writeText(link()); FE.toast("Link copied"); } catch { const i = $("#clmLink"); i.focus(); i.select(); FE.toast("Select the link and copy it"); } };
     $("#clmLink").onfocus = (e) => e.target.select();
-    $("#clmNew").onclick = () => { if (!confirm("Make a new link? The current one will stop working.")) return; code = newCode(); store.set("fastedit.claude.code", code); store.del("fastedit.claude.seen"); seen = false; lastCall = null; brand(); render(); FE.toast("New link made. Add it in Claude."); };
+    $("#clmNew").onclick = () => { if (!confirm("Make a new link? The current one will stop working.")) return; code = newCode(); store.set("fastedit.claude.code", code); store.del("fastedit.claude.seen"); seen = false; lastCall = null; brand(); render(); FE.toast("New link made. Add it in your AI app."); };
   }
-  function open() { dlg.hidden = false; render(); if (!on) $("#clmOn")?.focus(); }
+  let modelsFor = "";
+  async function loadModels() { // suggest the models this OpenAI key can use
+    if (modelsFor === keyOf("chatgpt")) return; modelsFor = keyOf("chatgpt");
+    try {
+      const r = await fetch(baseOf("chatgpt") + "/models", { headers: { authorization: "Bearer " + keyOf("chatgpt") } }); if (!r.ok) return;
+      const ids = ((await r.json()).data || []).map((x) => x.id).filter((id) => /^(gpt|o\d|chatgpt)/.test(id) && !/(audio|realtime|transcribe|tts|image|embed|moderation|search|instruct)/.test(id)).sort().reverse().slice(0, 40);
+      const dl = $("#clmModels"); if (dl) dl.innerHTML = ids.map((id) => `<option value="${esc(id)}">`).join("");
+    } catch {}
+  }
+  function open() { dlg.hidden = false; render(); }
   function close() { dlg.hidden = true; }
   $("#clmClose").onclick = close; dlg.addEventListener("click", (e) => { if (e.target === dlg) close(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !dlg.hidden) close(); });
-  setInterval(() => { if (!dlg.hidden) render(); }, 5000);
+  setInterval(() => { if (!dlg.hidden) refreshStatus(); }, 3000);
 
   const btn = document.createElement("button"); btn.className = "btn video-only"; btn.id = "clmOpen"; btn.onclick = open;
   $("#mktOpen") ? $("#mktOpen").before(btn) : $("#deluxeAccount").before(btn);
   const menu = $(".menubar"); let mb = null;
   if (menu) { mb = document.createElement("button"); mb.type = "button"; mb.className = "menu-btn clm-menu"; mb.onclick = open; menu.append(mb); }
-  function updateBtn() { const t = on ? "Claude ●" : "Claude"; btn.textContent = t; if (mb) mb.textContent = t; btn.classList.toggle("clm-on", on); if (mb) mb.classList.toggle("clm-on", on); }
+  function updateBtn() {
+    const live = chatActive() || on, t = live ? nameOf(chatActive() ? active : mcpAgent) + " ●" : "Connect AI";
+    btn.textContent = t; if (mb) mb.textContent = t; btn.classList.toggle("clm-on", live); if (mb) mb.classList.toggle("clm-on", live);
+  }
   updateBtn(); brand(); if (on) start();
 
   window.FEClaude = { open, close, chat, chatActive, get on() { return on; } };

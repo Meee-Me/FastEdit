@@ -1,6 +1,7 @@
-// Fast Edit connector for Claude (MCP over HTTP, Vercel function).
+// Fast Edit connector for AI apps (MCP over HTTP, Vercel function): Claude, ChatGPT and any other
+// app that supports remote MCP servers.
 //
-// In Claude: Settings -> Connectors -> Add custom connector -> paste the link Fast Edit shows
+// In the AI app: add a custom connector / remote MCP server -> paste the link Fast Edit shows
 // (https://fast-edit-nine.vercel.app/api/mcp?s=<your private code>).
 //
 // This function holds no files and no keys of its own. It turns Claude's tool calls into
@@ -73,7 +74,7 @@ async function callTool(s, name, args) {
   if (!tool) return asText(`Unknown tool ${name}.`, true);
   const tab = (await rpc("fe_tab", { p_session: s }))[0];
   if (!tab || Date.now() - new Date(tab.last_seen).getTime() > 20000) {
-    return asText("Fast Edit isn't open right now. Ask the user to open https://fast-edit-nine.vercel.app in their browser, tap \"Claude\", and turn on the connection. Then try again.", true);
+    return asText("Fast Edit isn't open right now. Ask the user to open https://fast-edit-nine.vercel.app in their browser, tap \"Connect AI\", and turn on the connection. Then try again.", true);
   }
   if (tool === "do" && !(typeof args.request === "string" && args.request.trim())) return asText("Give a request, like \"make it warmer\".", true);
   if (tool === "mode" && !["photo", "video"].includes(args.mode)) return asText("mode must be photo or video.", true);

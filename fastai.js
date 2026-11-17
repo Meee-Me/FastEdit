@@ -952,7 +952,7 @@
     const video = mode === "video";
     if (isQuestion(t)) { const a = faq(t, video ? "video" : "photo"); if (a) return { kind: "answer", text: a }; }
     if (/\b(thumbnail|thumb nail|cover image|cover photo)\b/i.test(t)) return { kind: "make_thumbnail", topic: titleIn(t) || topicOf(t.replace(/\bthumbnail\b/i, "").replace(/\bfor me\b/gi, "")) };
-    if (/\b(connect|link|hook up|plug in)\b[^.]*\bclaude\b|^\s*(add|use|open)\s+claude\b|\bclaude\b[^.]*\b(connector|mcp|agent)\b|\b(add|connect) (your|ur) agent\b|\bmcp\b/i.test(t)) return { kind: "open_claude" };
+    if (/\b(connect|link|hook up|plug in)\b[^.]*\b(claude|chat ?gpt|gpt|openai|gemini|an? ai)\b|^\s*(add|use|open)\s+(claude|chat ?gpt|gemini)\b|\b(claude|chat ?gpt|gemini)\b[^.]*\b(connector|mcp|agent)\b|\b(add|connect) (your|ur) agent\b|\bmcp\b/i.test(t)) return { kind: "open_claude" };
     if (/open\.spotify\.com\/(?:intl-[a-z-]+\/)?track\/|spotify:track:/i.test(t)) return { kind: "spotify_like" };
     if (/\b(remove|delete|take (?:off|out|away)|get rid of|drop|clear|lose|replace|swap|change)\b[^.]*\b(music|song|soundtrack|background track)\b/i.test(t) && !/\b(sound effects?|sfx)\b/i.test(t) && !/\b(louder|quieter|volume)\b/i.test(t)) return { kind: "remove_music" };
     if (/\b(market ?place|asset store|media library)\b/i.test(t) && !/\b(find|search|get)\b.*\b(music|song|photo|picture|image|sound)/i.test(t)) return { kind: "open_market" };

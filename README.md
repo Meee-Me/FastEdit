@@ -108,9 +108,14 @@ Fast Edit doesn't download from Google or take copyrighted songs. Everything com
 - It isn't an open proxy.
 - If a host refuses (Freesound often does), Fast Edit says so. Photos then fall back to Openverse's own copy, and the AI picks another item or uses an original.
 
-## Connect Claude
+## Connect an AI (Claude, ChatGPT, others)
 
-The **Claude** button (menu bar in Photo mode, top right in Video mode) lets Claude see and edit your work in Fast Edit.
+The **Connect AI** button (it shows the AI's name once connected) works with Claude, ChatGPT and other AI services, in two ways:
+
+- **Chat panel:** paste that service's API key and the panel becomes that AI (Claude via the Anthropic SDK; ChatGPT, Gemini, Groq, OpenRouter, Mistral and anything else that uses OpenAI's chat format via plain `fetch`, with a model that sees images and uses tools). Keys are stored per AI in this browser only.
+- **Private link:** one MCP connector link that any AI app with remote MCP support can use (Claude: Settings → Connectors; ChatGPT: Developer mode connectors).
+
+The sections below describe both. The **Claude** button (menu bar in Photo mode, top right in Video mode) lets Claude see and edit your work in Fast Edit.
 
 - Turn on **Allow Claude to use this tab**, copy your private link, and in Claude add it under Settings → Connectors → Add custom connector.
 - Claude's tools: `fastedit_look` (screenshot plus what's open), `fastedit_do` (any request you could type in the chat, in plain English), `fastedit_undo`, `fastedit_mode` and `fastedit_result`. Claude looks at your picture and tells Fast Edit AI what to do.
