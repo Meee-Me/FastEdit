@@ -101,6 +101,7 @@
         case "make_poster": return await cfg.makePoster(r.topic, text);
         case "make_thumbnail": return await cfg.makeThumbnail(r.topic, text);
         case "auto_edit": return await cfg.autoEdit(r.topic, r.secs, text);
+        case "open_claude": { if (!window.FEClaude) return { text: "The Claude connection isn't loaded yet. Try again in a moment." }; window.FEClaude.open(); return { text: "I opened **Connect Claude**. Turn it on, copy your private link, and add it in Claude under Settings → Connectors → Add custom connector. Then Claude can see and edit your work here." }; }
         case "spotify_like": case "remove_music": case "find_music": case "compose_music": case "find_photo": case "find_sound": case "open_market": case "add_credits": {
           const M = window.FEMarket; if (!M) return { text: "The Marketplace isn't loaded yet. Try again in a moment." };
           const fn = { spotify_like: "spotifyLike", remove_music: "removeMusic", find_music: "findMusic", compose_music: "composeMusic", find_photo: "findPhoto", find_sound: "findSound", open_market: "openMarket", add_credits: "addCredits" }[r.kind];

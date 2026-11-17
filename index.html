@@ -388,6 +388,19 @@ body.v-exporting .vstage .transport, body.v-exporting #vTimeline { pointer-event
 .vsnd { position: absolute; z-index: 1; top: 1px; height: 11px; line-height: 10px; background: rgba(110,190,140,.3); border: 1px solid rgba(110,190,140,.7); border-radius: 4px; color: var(--fg); font-size: 10px; padding: 0 4px; overflow: hidden; white-space: nowrap; text-align: left; }
 @media (max-width: 640px) { .mkt { padding: 0; } .mkt-panel { height: 100%; border-radius: 0; } }
 .menubar .mkt-menu { color: var(--accent); }
+.clm-panel { width: min(560px, 100%); height: auto; max-height: 100%; }
+.clm-lead { line-height: 1.55; margin: 6px 0 12px; }
+.clm-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.clm-status { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--panel-2); color: var(--muted); }
+.clm-status.on { background: rgba(110,190,140,.16); color: #9fd8b3; }
+.clm-status.busy { background: rgba(240,164,58,.18); color: var(--accent); }
+.clm-status.err { background: rgba(220,90,90,.18); color: #f0a0a0; }
+.clm-link { display: flex; gap: 6px; }
+.clm-link input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; color: var(--fg); font: 12px var(--font-mono, monospace); }
+.clm-steps { padding-left: 20px; line-height: 1.6; margin: 12px 0; }
+.clm-panel .hint { color: var(--muted); font-size: 11.5px; margin: 6px 0; }
+.clm-panel .btnrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn.clm-on, .menu-btn.clm-on { color: #9fd8b3; }
 @media (max-width: 1520px) { #docInfo { display: none !important; } }
 .spot-box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 2px 12px 12px; margin-top: 4px; }
 .spot-form { display: flex; gap: 6px; }
@@ -1520,6 +1533,7 @@ setTool("brush");
 <script src="video.js"></script>
 <script src="composer.js"></script>
 <script src="market.js"></script>
+<script src="claude.js"></script>
 <script src="deluxe-link.js"></script>
 </body>
 </html>

@@ -108,6 +108,16 @@ Fast Edit doesn't download from Google or take copyrighted songs. Everything com
 - It isn't an open proxy.
 - If a host refuses (Freesound often does), Fast Edit says so. Photos then fall back to Openverse's own copy, and the AI picks another item or uses an original.
 
+## Connect Claude
+
+The **Claude** button (menu bar in Photo mode, top right in Video mode) lets Claude see and edit your work in Fast Edit.
+
+- Turn on **Allow Claude to use this tab**, copy your private link, and in Claude add it under Settings → Connectors → Add custom connector.
+- Claude's tools: `fastedit_look` (screenshot plus what's open), `fastedit_do` (any request you could type in the chat, in plain English), `fastedit_undo`, `fastedit_mode` and `fastedit_result`. Claude looks at your picture and tells Fast Edit AI what to do.
+- It only works while Fast Edit is open in a tab with the switch on.
+- `api/mcp.mjs` is the connector (MCP over HTTP, one Vercel function). It passes commands through a small relay in Supabase (`supabase/claude-bridge.sql`, run once): the function queues a command, the open tab takes it, runs it and sends back a reply and a screenshot (small JPEG).
+- Your files stay in the browser. The link's secret code is the only thing connecting Claude to your tab, so treat it like a password. "Make a new link" replaces it.
+
 ## Deluxe account
 
 Fast Edit is a Deluxe website. **Sign in with Deluxe Main** (top right) uses your Deluxe account, and the ∷ menu links every Deluxe website. Signing in is optional; guests can use everything.
