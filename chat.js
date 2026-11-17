@@ -83,7 +83,8 @@
       aiMsg(el, { text: branded ? branded.welcome : cfg.welcome, chips: cfg.starters });
     }
 
-    async function respond(text) {
+    async function respond(text, internal) {
+      if (!internal && window.FEClaude && window.FEClaude.chatActive()) return await window.FEClaude.chat(text, chats[cfg.mode], cfg.mode);
       if (!AI.ready) { setStatus("Learning on your device…"); await AI.train(); }
       const r = AI.converse(text, cfg.mode);
       const followChips = (extra) => [...(extra || []).slice(0, 2), "Stronger", "A bit less", "Undo that"];
@@ -162,7 +163,7 @@
     box.addEventListener("input", autosize);
     box.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(box.value); } });
     form.addEventListener("submit", (e) => { e.preventDefault(); send(box.value); });
-    host.querySelector(".chat-new").onclick = () => { mem.last = null; welcome(); box.focus(); };
+    host.querySelector(".chat-new").onclick = () => { mem.last = null; host.dispatchEvent(new CustomEvent("chat-reset")); welcome(); box.focus(); };
     let branded = null;
     function setStatus(text, state) { if (branded) return; statusEl.textContent = text; dot.className = "agentdot" + (state ? " " + state : ""); }
     const whoEl = host.querySelector(".chat-who b"), avatarEl = host.querySelector(".chat-head .chat-avatar"), footEl = host.querySelector(".chat-foot");
@@ -170,14 +171,19 @@
     const base = { name: whoEl.textContent, avatar: avatarEl.innerHTML, foot: footEl.textContent };
     function setBrand(b) {
       branded = b || null; host.classList.toggle("claude-brand", !!b); curAvatar = b ? SPARK : BOLT;
-      box.placeholder = b ? "Type an edit here, or ask Claude in claude.ai…" : cfg.placeholder;
+      box.placeholder = b ? (b.placeholder || "Message Claude…") : cfg.placeholder;
       host.querySelectorAll(".msg.ai .chat-avatar").forEach((a) => (a.innerHTML = curAvatar));
       whoEl.textContent = b ? b.name : base.name; avatarEl.innerHTML = b ? SPARK : base.avatar; footEl.textContent = b ? b.foot : base.foot;
       if (b) { statusEl.textContent = b.status; dot.className = "agentdot ok"; } else { statusEl.textContent = "Ready · on your device"; dot.className = "agentdot ok"; }
+      if (log.children.length <= 1) welcome(); // still just the greeting: say it in the right voice
     }
-    function note(text) { const n = document.createElement("div"); n.className = "msg-note"; n.textContent = text; log.append(n); scroll(); }
+    function note(text) {
+      const n = document.createElement("div"); n.className = "msg-note"; n.textContent = text;
+      const typ = log.querySelector(".msg.ai:last-child .typing"), anchor = typ && typ.closest(".msg");
+      if (anchor) log.insertBefore(n, anchor); else log.append(n); scroll();
+    }
     welcome();
-    const api = { send, setStatus, welcome, mem, cfg, attach: (files) => addPending(files), setBrand, note };
+    const api = { send, setStatus, welcome, mem, cfg, attach: (files) => addPending(files), setBrand, note, run: (t) => respond(t, true), host };
     chats[cfg.mode] = api;
     return api;
   }

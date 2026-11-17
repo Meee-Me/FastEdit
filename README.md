@@ -116,6 +116,7 @@ The **Claude** button (menu bar in Photo mode, top right in Video mode) lets Cla
 - Claude's tools: `fastedit_look` (screenshot plus what's open), `fastedit_do` (any request you could type in the chat, in plain English), `fastedit_undo`, `fastedit_mode` and `fastedit_result`. Claude looks at your picture and tells Fast Edit AI what to do.
 - It only works while Fast Edit is open in a tab with the switch on.
 - `api/mcp.mjs` is the connector (MCP over HTTP, one Vercel function). It passes commands through a small relay in Supabase (`supabase/claude-bridge.sql`, run once): the function queues a command, the open tab takes it, runs it and sends back a reply and a screenshot (small JPEG).
+- **Claude in the chat panel:** paste a Claude API key (console.anthropic.com, a separate account from claude.ai; messages are billed to it) in the same dialog and the chat panel becomes Claude itself: typed messages go to `claude-opus-5-5` straight from your browser (key kept in this browser only), with a small screenshot. Claude edits by telling the on-device Fast Edit AI what to do, then looks at the result. The browser build of the official SDK is in `vendor/anthropic-sdk.js` (Apache-2.0) and loads only when Claude is first used. Without a key, the built-in Fast Edit AI answers.
 - Your files stay in the browser. The link's secret code is the only thing connecting Claude to your tab, so treat it like a password. "Make a new link" replaces it.
 
 ## Deluxe account
