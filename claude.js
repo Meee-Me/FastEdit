@@ -73,26 +73,11 @@
     const t = await r.text(); return t ? JSON.parse(t) : null;
   }
 
-  /* ---------- what's on screen ---------- */
-  function shot(max = 960) {
-    let src = null;
-    if (mode() === "video") src = $("#vCanvas");
-    else src = $("#view"); // the finished picture, with adjustments applied
-    if (!src || !src.width) return null;
-    const k = Math.min(1, max / Math.max(src.width, src.height)), c = document.createElement("canvas");
-    c.width = Math.max(1, Math.round(src.width * k)); c.height = Math.max(1, Math.round(src.height * k));
-    const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(src, 0, 0, c.width, c.height);
-    return c.toDataURL("image/jpeg", 0.8).split(",")[1];
-  }
-  function describe() {
-    if (mode() === "video") {
-      const V = window.FEVideo && window.FEVideo.V; if (!V) return "Video mode.";
-      const m = V.music && V.media.find((x) => x.id === V.music.mediaId);
-      return `Video mode. ${V.clips.length} clip(s), ${window.FEVideo.total().toFixed(1)} s long, playhead at ${window.FEVideo.time.toFixed(1)} s. Music: ${m ? m.name : "none"}. Sound effects: ${V.sounds.length}. Text/effects/overlays: ${V.overlays.length}.`;
-    }
-    const S = FE.S; const names = S.layers.map((l) => l.name).slice(-8).join(", ");
-    return `Photo mode. ${S.w} x ${S.h} px, ${S.layers.length} layer(s) (${names}).`;
-  }
+  /* ---------- what's on screen (see agent.js) ---------- */
+  const shot = (m) => window.FEAgent.shot(m), describe = () => window.FEAgent.describe();
+  let toolsMod = null; // the tool definitions (agent-tools.mjs), loaded on first use
+  const loadTools = () => (toolsMod ||= import("./agent-tools.mjs").catch((e) => { toolsMod = null; throw e; }));
+  const noteFor = async (c, name, args) => { try { const { LABELS } = await loadTools(); const f = LABELS[name]; if (f) c.note(`${nm()} ${f(args || {})}`); } catch {} };
   const info = () => ({ mode: mode(), v: 1 });
 
   /* ---------- running commands ---------- */
@@ -109,20 +94,19 @@
   }
   async function run(tool, args) {
     if (tool === "look") {
-      chatOf().note(nm() + " looked at your " + (mode() === "video" ? "video" : "photo"));
       if (mode() === "video" && Number.isFinite(args.at) && window.FEVideo.V.clips.length) { await window.FEVideo.seek(Math.max(0, Math.min(args.at, window.FEVideo.total() - 0.05))); await sleep(300); }
       return { text: describe(), image: shot() };
     }
     if (tool === "do") { const text = await chatSend(String(args.request || ""), nm()); return { text: `${text || "Done."}\n\n${describe()}`, image: shot() }; }
     if (tool === "undo") {
-      const m = mode(), api = window.FEChat.get(m); const ok = api && api.cfg.undo(); api.note(ok ? nm() + " undid the last change" : nm() + " tried to undo, but there was nothing to undo");
+      const m = mode(), api = window.FEChat.get(m); const ok = api && api.cfg.undo();
       await sleep(200); return { text: (ok ? "Undid the last change. " : "Nothing to undo. ") + describe(), image: shot() };
     }
     if (tool === "mode") {
-      if (args.mode !== mode()) { $(`[data-app-mode="${args.mode}"]`).click(); await sleep(500); chatOf().note(nm() + " switched to " + args.mode + " mode"); }
+      if (args.mode !== mode()) { $(`[data-app-mode="${args.mode}"]`).click(); await sleep(500); }
       return { text: `Now in ${mode()} mode. ${describe()}`, image: shot() };
     }
-    return { error: true, text: "That command isn't supported by this version of Fast Edit." };
+    return await window.FEAgent.call("fastedit_" + tool, args);
   }
   async function tick() {
     if (!on || polling) return; polling = true;
@@ -130,6 +114,7 @@
       const cmds = (await rpc("fe_take", { p_session: code, p_info: info() })) || [];
       lastErr = null;
       for (const c of cmds) {
+        if (c.tool !== "do") noteFor(chatOf(), "fastedit_" + c.tool, c.args || {});
         if (!seen) { seen = true; store.set("fastedit.claude.seen", code); brand(); }
         busy = true; refreshStatus();
         let res;
@@ -154,20 +139,13 @@
     s.onload = () => res(window.Anthropic); s.onerror = () => { sdkP = null; rej(new Error("Couldn't load the Claude library. Check your connection.")); }; document.head.append(s);
   }));
   const MODEL = "claude-opus-5-5";
-  const SYSTEM = (n) => `You are ${n}, chatting with the user inside Fast Edit, a photo and video editor in their browser. The user talks to you in the editor's side panel and sees your replies there.
+  const SYSTEM = (n) => `You are ${n}. The user is chatting with you inside Fast Edit, a photo and video editor in their browser, through its side panel.
 
-You can see their work and change it with tools:
-- fastedit_look: a screenshot of the photo or the current video frame, plus what's open. Each user message already includes one; call it again after changes to check the result, or (video) to look at another moment.
-- fastedit_do: tell Fast Edit's built-in editing assistant what to do, in plain English, one clear step at a time. It is a small on-device model that understands short editing commands, not long or subtle sentences. Photo examples: "make it warmer", "blur the background", "add a caption saying Hello", "remove the background", "make a thumbnail". Video examples: "trim the first 2 seconds", "make it 15 seconds with the best parts", "cinematic and vertical for TikTok", "find upbeat music", "add a whoosh sound", "edit it for me", "make a video about my trip". Break bigger requests into steps, and if it doesn't understand, rephrase more simply.
-- fastedit_undo and fastedit_mode (photo or video).
+You can see their work and change it with the editor's tools. Use your own judgment, taste and creativity: plan the work, write the words, choose the colors, timing and music, and make something good, the way you would if you were editing it yourself. Look at the result when it matters.
 
-Chat like a helpful, direct person: answer questions, give honest opinions about their photo or video, and make the edits they ask for. Look at the result before saying it worked, and don't claim an edit you didn't make. Keep replies short. Music from the Marketplace uses free Creative Commons songs or originals, never copyrighted songs.`;
-  const TOOLS = [
-    { name: "fastedit_look", description: "Screenshot of the current photo or video frame, plus what's open.", input_schema: { type: "object", properties: { at_seconds: { type: "number", description: "Video only: look at this time in the timeline (seconds)." } }, additionalProperties: false } },
-    { name: "fastedit_do", description: "Tell Fast Edit's built-in editing assistant to do one thing, in plain English. Returns its reply and a screenshot.", input_schema: { type: "object", properties: { request: { type: "string" } }, required: ["request"], additionalProperties: false } },
-    { name: "fastedit_undo", description: "Undo the last change.", input_schema: { type: "object", properties: {}, additionalProperties: false } },
-    { name: "fastedit_mode", description: "Switch between photo and video mode.", input_schema: { type: "object", properties: { mode: { type: "string", enum: ["photo", "video"] } }, required: ["mode"], additionalProperties: false } },
-  ];
+Two things about the editor: its tools make precise changes (text, colors, shapes, layers, a scene-by-scene video maker, an exact timeline editor, free music and sounds), and fastedit_do hands a short request to a small built-in assistant for things only it can do (remove or blur a background, animated effects like snow or confetti, thumbnails). Music and photos from the Marketplace are free Creative Commons or original, never copyrighted songs.`;
+  let TOOLS = [], LABELS_ = {};
+  async function ensureTools() { const m = await loadTools(); TOOLS = m.TOOLS.map((t) => ({ name: t.name, description: t.description, input_schema: t.inputSchema })); LABELS_ = m.LABELS; }
   const imgBlock = (b64) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } });
   const stripImages = (msgs) => { // keep old turns cheap: only the newest screenshots are sent
     for (const m of msgs) if (m.role === "user" && Array.isArray(m.content)) {
@@ -186,9 +164,8 @@ Chat like a helpful, direct person: answer questions, give honest opinions about
       const tag = rep.tags && rep.tags.length ? ` (${rep.tags.join(", ")})` : "";
       return { text: `${rep.text || "Done."}${tag}${rep.chips && rep.chips.length ? `\nFast Edit AI suggests: ${rep.chips.join(" | ")}` : ""}\n\n${describe()}`, image: shot(768) };
     }
-    return { text: "Unknown tool.", error: true };
+    return await window.FEAgent.call(name, a);
   }
-  const NOTES = { fastedit_do: (a) => `${nm()}: ${String(a.request || "").slice(0, 80)}` }; // look, undo and mode add their own notes
   function keyProblem(e, Anthropic) {
     if (e instanceof Anthropic.AuthenticationError) return "Anthropic didn't accept that API key. Open **Connect AI** at the top, remove the key and add a valid one.";
     if (e instanceof Anthropic.PermissionDeniedError) return "That API key isn't allowed to use this model. Check the key's access in console.anthropic.com.";
@@ -198,7 +175,7 @@ Chat like a helpful, direct person: answer questions, give honest opinions about
     return "Something went wrong: " + (e && e.message ? e.message : "unknown error");
   }
   async function claudeChat(text, c, m) {
-    let Anthropic; try { Anthropic = await loadSDK(); } catch (e) { return { text: e.message }; }
+    let Anthropic; try { Anthropic = await loadSDK(); await ensureTools(); } catch (e) { return { text: e.message }; }
     const client = new Anthropic({ apiKey: keyOf("claude"), dangerouslyAllowBrowser: true, ...(window.__FE_CLAUDE_BASE ? { baseURL: window.__FE_CLAUDE_BASE } : {}) });
     const msgs = hist[m]; stripImages(msgs); const mark = msgs.length;
     const first = shot(768);
@@ -206,9 +183,9 @@ Chat like a helpful, direct person: answer questions, give honest opinions about
     let edited = false, fallbacks = true, out = "";
     const create = (body) => client.beta.messages.create(fallbacks ? { ...body, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" } : body);
     try {
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 25; i++) {
         let resp;
-        try { resp = await create({ model: MODEL, max_tokens: 4096, system: SYSTEM(nameOf("claude")), tools: TOOLS, thinking: { type: "adaptive" }, output_config: { effort: "medium" }, messages: msgs }); }
+        try { resp = await create({ model: MODEL, max_tokens: 16000, system: SYSTEM(nameOf("claude")), tools: TOOLS, thinking: { type: "adaptive" }, output_config: { effort: "high" }, messages: msgs }); }
         catch (e) { if (fallbacks && e instanceof Anthropic.BadRequestError && /beta|fallback/i.test(e.message)) { fallbacks = false; i--; continue; } throw e; }
         msgs.push({ role: "assistant", content: resp.content });
         const say = resp.content.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
@@ -218,13 +195,13 @@ Chat like a helpful, direct person: answer questions, give honest opinions about
         if (resp.stop_reason !== "tool_use" || !uses.length) { out = say || "Done."; break; }
         const results = [];
         for (const u of uses) {
-          const cc = window.FEChat.get(mode()) || c; if (NOTES[u.name]) cc.note(NOTES[u.name](u.input || {}));
+          const cc = window.FEChat.get(mode()) || c; await noteFor(cc, u.name, u.input);
           let r; try { r = await localTool(u.name, u.input || {}, cc); } catch (e) { r = { text: `That failed: ${e && e.message ? e.message : "unknown error"}`, error: true }; }
-          if (u.name === "fastedit_do" || u.name === "fastedit_undo") edited = true;
+          if (u.name !== "fastedit_look") edited = true;
           results.push({ type: "tool_result", tool_use_id: u.id, ...(r.error ? { is_error: true } : {}), content: [{ type: "text", text: r.text || "Done." }, ...(r.image ? [imgBlock(r.image)] : [])] });
         }
         msgs.push({ role: "user", content: results });
-        if (i === 9) out = say || "I stopped after several steps. Tell me if you want me to keep going.";
+        if (i === 24) out = say || "I stopped after several steps. Tell me if you want me to keep going.";
       }
     } catch (e) { msgs.length = mark; console.error(e); return { text: keyProblem(e, Anthropic) }; }
     const img = edited ? shot(720) : null;
@@ -245,6 +222,7 @@ Chat like a helpful, direct person: answer questions, give honest opinions about
     return `${n} returned an error (${res.status})${msg ? ": " + msg.slice(0, 300) : ""}`;
   }
   async function openaiChat(p, text, c, m) {
+    try { await ensureTools(); } catch (e) { return { text: "Couldn't load the editing tools. Check your connection." }; }
     const base = baseOf(p), model = modelOf(p), n = nameOf(p);
     if (!/^https:\/\//.test(base) && !/^http:\/\/localhost/.test(base)) return { text: `Open **Connect AI** and enter ${n}'s website address (it starts with https://).` };
     if (!model) return { text: `Open **Connect AI** and enter the model name to use for ${n}.` };
@@ -254,7 +232,7 @@ Chat like a helpful, direct person: answer questions, give honest opinions about
     const tools = TOOLS.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.input_schema } }));
     let edited = false, out = "";
     try {
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 25; i++) {
         let res;
         try { res = await fetch(base + "/chat/completions", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + keyOf(p) }, body: JSON.stringify({ model, messages: [{ role: "system", content: SYSTEM(n) }, ...msgs], tools }) }); }
         catch { throw new Error(`Couldn't reach ${vendorOf(p)}. Check your connection. (Some AI services don't allow calls straight from a web page.)`); }
@@ -269,14 +247,14 @@ Chat like a helpful, direct person: answer questions, give honest opinions about
         for (const tc of calls) {
           let args = {}; try { args = JSON.parse((tc.function && tc.function.arguments) || "{}"); } catch {}
           const name = tc.function && tc.function.name, cc = window.FEChat.get(mode()) || c;
-          if (NOTES[name]) cc.note(NOTES[name](args));
+          await noteFor(cc, name, args);
           let r; try { r = await localTool(name, args, cc); } catch (e) { r = { text: `That failed: ${e && e.message ? e.message : "unknown error"}`, error: true }; }
-          if (name === "fastedit_do" || name === "fastedit_undo") edited = true;
+          if (name !== "fastedit_look") edited = true;
           msgs.push({ role: "tool", tool_call_id: tc.id, content: (r.error ? "Error: " : "") + (r.text || "Done.") });
           if (r.image) lastImg = r.image;
         }
         if (lastImg) msgs.push({ role: "user", content: [{ type: "text", text: "Screenshot of the editor after that:" }, { type: "image_url", image_url: { url: "data:image/jpeg;base64," + lastImg } }] });
-        if (i === 9) out = say || "I stopped after several steps. Tell me if you want me to keep going.";
+        if (i === 24) out = say || "I stopped after several steps. Tell me if you want me to keep going.";
       }
     } catch (e) { msgs.length = mark; console.error(e); return { text: e && e.message ? e.message : "Something went wrong." }; }
     const img = edited ? shot(720) : null;
@@ -312,7 +290,7 @@ Chat like a helpful, direct person: answer questions, give honest opinions about
         <div class="clm-field"><label for="clmBase">Website address</label><input id="clmBase" value="${esc(getf("other", "base"))}" placeholder="https://…/v1" autocomplete="off" inputmode="url"></div>
         <div class="clm-field"><label for="clmModel">Model</label><input id="clmModel" value="${esc(getf("other", "model"))}" placeholder="model name" autocomplete="off"></div>` : "";
     b.innerHTML = `
-      <p class="clm-lead">Connect an <b>AI</b> to Fast Edit. It looks at your photo or video frame and edits it with you: tell it “make it warmer” or “cut it to 15 seconds”.</p>
+      <p class="clm-lead">Connect an <b>AI</b> to Fast Edit. It sees your photo or video and edits it with its own judgment: ask it to “make a cool video about my trip”, “design a poster” or “cut this to 15 seconds”. It plans the scenes, writes the text, picks colors and music, and edits the timeline itself.</p>
       <div class="label">1. Chat with an AI right here</div>
       <p class="hint" style="margin-top:0">Replaces Fast Edit AI in the chat panel. ${hint} The key is for that service's own account (a subscription like ChatGPT Plus or claude.ai doesn't include it, and every message is billed to the account). The key stays in this browser and goes only to ${esc(vendorOf(prov))}, along with your messages and a small screenshot of your work.</p>
       <div class="clm-field"><label for="clmProv">AI</label><select id="clmProv">${opt("p", prov)}</select></div>

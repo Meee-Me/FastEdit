@@ -1444,7 +1444,173 @@
   }
   function frameAnalysis() { if (!V.clips.length) return null; const c = mk(PW, PH); renderFrame(c.getContext("2d"), PW, PH, Math.min(P.t, total() - 0.05), { noOverlays: true }); return AI.analyze(c); }
   function addCreditsOverlay(text) { if (!V.clips.length) return; pushUndo(); const T = total(), st = Math.max(0, T - 4); addOverlay({ kind: "text", text, clause: "bottom sans", k: 0.55, color: null }, frameAnalysis(), { start: st, end: T }); refreshAll(); redrawSoon(); }
-  window.FEVideo = { V, seek, total, play, pause, addFiles, makeVideo, makeThumbnail, autoEdit, addMusicFile, removeMusic, addSoundFile, frameAnalysis, addCreditsOverlay, realClips, switchTab, get time() { return P.t; }, get exporting() { return !!EXP; },
+
+  /* ============ controls for an AI to drive (Claude, ChatGPT, ...): exact, structured edits ============ */
+  const okColor = (c, d) => (typeof c === "string" && /^(#[0-9a-f]{3,8}|(rgb|hsl)a?\([\d\s.,%deg/]+\)|[a-z]{3,20})$/i.test(c.trim()) ? c.trim() : d);
+  const numOr = (v, d) => (Number.isFinite(+v) && v !== null && v !== "" ? +v : d);
+  const RATIOS = { "16:9": 16 / 9, "9:16": 9 / 16, "1:1": 1, "4:5": 4 / 5, "5:4": 5 / 4, "4:3": 4 / 3, "3:4": 3 / 4, "21:9": 21 / 9, original: "original" };
+  const SIZES = { small: 0.06, medium: 0.09, large: 0.13, huge: 0.18 };
+  function makeSceneMedia(sc, ar, idx) {
+    const w = ar >= 1 ? 1280 : 720, h = ar >= 1 ? Math.round(1280 / ar) : 1280, minS = Math.min(w, h);
+    const dur = clamp(numOr(sc.seconds, 3), 1, 15), text = String(sc.text || "").slice(0, 200), sub = String(sc.sub || "").slice(0, 200);
+    const hue = Math.round(AI.rngFrom(AI.hashStr(text + idx))() * 360);
+    const c1 = okColor(Array.isArray(sc.bg) ? sc.bg[0] : sc.bg, `hsl(${hue},45%,12%)`), c2 = okColor(Array.isArray(sc.bg) ? sc.bg[1] || sc.bg[0] : sc.bg, `hsl(${(hue + 50) % 360},55%,22%)`);
+    const tcol = okColor(sc.text_color, "#ffffff"), acc = okColor(sc.accent, "#f0a43a");
+    const fam = FE.FONTS[sc.font] || FE.FONTS.display || "system-ui, sans-serif", sfam = FE.FONTS.sans || "system-ui, sans-serif";
+    const size = minS * (SIZES[sc.size] || (idx === 0 ? SIZES.large : SIZES.medium)), anim = ["rise", "fade", "zoom", "slide", "type"].includes(sc.anim) ? sc.anim : "rise";
+    const r = AI.rngFrom(AI.hashStr(text + "b" + idx)), drift = sc.blobs !== false;
+    const blobs = Array.from({ length: 6 }, () => ({ x: r(), y: r(), s: 0.25 + r() * 0.35, v: 0.02 + r() * 0.04 }));
+    const m = { id: uid++, kind: "synthetic", name: `Scene ${idx + 1}: ${text.slice(0, 30) || "(no text)"}`, w, h, duration: dur, canvas: mk(w, h), generated: true };
+    m.ctx = m.canvas.getContext("2d");
+    const ease = (x) => 1 - Math.pow(1 - clamp(x, 0, 1), 3), ang = ((numOr(sc.angle, 135) % 360) * Math.PI) / 180;
+    m.draw = (c, t) => {
+      const cx = w / 2, cy = h / 2, L = Math.abs(w * Math.cos(ang)) / 2 + Math.abs(h * Math.sin(ang)) / 2;
+      const g = c.createLinearGradient(cx - Math.cos(ang) * L, cy - Math.sin(ang) * L, cx + Math.cos(ang) * L, cy + Math.sin(ang) * L); g.addColorStop(0, c1); g.addColorStop(1, c2);
+      c.globalAlpha = 1; c.globalCompositeOperation = "source-over"; c.fillStyle = g; c.fillRect(0, 0, w, h);
+      if (drift) {
+        c.globalCompositeOperation = "screen";
+        for (const b of blobs) { const x = ((b.x + t * b.v) % 1.4 - 0.2) * w, y = (b.y + Math.sin(t * 0.6 + b.x * 6) * 0.05) * h, R = b.s * Math.max(w, h); const gg = c.createRadialGradient(x, y, 0, x, y, R); gg.addColorStop(0, "rgba(255,255,255,.10)"); gg.addColorStop(1, "rgba(255,255,255,0)"); c.fillStyle = gg; c.fillRect(0, 0, w, h); }
+        c.globalCompositeOperation = "source-over";
+      }
+      const inP = ease(t / 0.7), outP = clamp((t - (dur - 0.5)) / 0.5, 0, 1), alpha = inP * (1 - outP);
+      c.save(); c.globalAlpha = alpha; c.textAlign = "center"; c.textBaseline = "middle";
+      let shown = text; if (anim === "type") shown = text.slice(0, Math.ceil(text.length * clamp(t / Math.min(1.6, dur * 0.5), 0, 1)));
+      let dx = 0, dy = anim === "rise" ? (1 - inP) * minS * 0.05 : 0, sc2 = anim === "zoom" ? 0.8 + 0.2 * inP : 1; if (anim === "slide") dx = (1 - inP) * -w * 0.12;
+      c.translate(cx + dx, cy + dy); c.scale(sc2, sc2); c.translate(-cx, -cy);
+      c.font = `800 ${size}px ${fam}`; c.fillStyle = tcol;
+      const maxW = w * 0.84, rows = []; let cur = "";
+      for (const wd of String(text).split(" ")) { const tt = cur ? cur + " " + wd : wd; if (c.measureText(tt).width > maxW && cur) { rows.push(cur); cur = wd; } else cur = tt; } rows.push(cur);
+      const lh = size * 1.16, subSize = minS * 0.045, blockH = rows.length * lh + (sub ? subSize * 2.2 : 0), y0 = h / 2 - blockH / 2 + lh / 2;
+      c.shadowColor = "rgba(0,0,0,.35)"; c.shadowBlur = size * 0.35;
+      let used = 0; rows.forEach((row, k) => { const part = anim === "type" ? shown.slice(used, used + row.length + 1).trimEnd() : row; used += row.length + 1; c.fillText(part, cx, y0 + k * lh); });
+      c.shadowBlur = 0;
+      if (sub) { c.font = `500 ${subSize}px ${sfam}`; c.globalAlpha = alpha * 0.9; c.fillText(sub, cx, y0 + (rows.length - 1) * lh + lh * 0.5 + subSize * 1.5, w * 0.84); c.globalAlpha = alpha; }
+      if (sc.bar !== false) { c.fillStyle = acc; const bw = minS * 0.12 * inP; c.fillRect(cx - bw / 2, y0 + (rows.length - 1) * lh + lh * 0.55 + (sub ? subSize * 2.6 : 0), bw, Math.max(3, minS * 0.008)); }
+      c.restore();
+    };
+    m.draw(m.ctx, Math.min(0.9, dur / 2)); m.thumb = thumbFrom(m.canvas, w, h);
+    return m;
+  }
+  async function agentMake(spec) {
+    const scenes = (Array.isArray(spec.scenes) ? spec.scenes : []).slice(0, 30);
+    if (!scenes.length) throw new Error("Give at least one scene, like {text: \"Hello\", seconds: 3}.");
+    const real = realClips().length > 0, pos = ["replace", "start", "end"].includes(spec.position) ? spec.position : real ? "start" : "replace";
+    let ar = spec.aspect && spec.aspect in RATIOS ? RATIOS[spec.aspect] : null;
+    if (ar == null) ar = pos === "replace" || !V.clips.length ? 16 / 9 : outAspect();
+    const arNum = ar === "original" ? baseAspect() : ar;
+    const fonts = [...new Set(scenes.map((x) => FE.FONTS[x.font] || FE.FONTS.display))]; for (const f of fonts) { try { await document.fonts.load(`800 40px ${f}`); } catch {} }
+    pause(); pushUndo();
+    const ms = scenes.map((x, i) => makeSceneMedia(x, arNum, i)), clips = ms.map((m) => ({ id: uid++, mediaId: m.id, in: 0, out: m.duration, speed: 1 }));
+    V.media.push(...ms);
+    const dur = ms.reduce((a, m) => a + m.duration, 0);
+    if (pos === "replace") { V.clips = clips; V.overlays = []; V.trans = {}; V.ratio = ar === "original" ? "original" : ar; }
+    else if (pos === "start") { V.overlays.forEach((o) => { if (!o.full) { o.start += dur; o.end += dur; } }); V.clips.unshift(...clips); if (spec.aspect) V.ratio = ar === "original" ? "original" : ar; }
+    else { V.clips.push(...clips); if (spec.aspect) V.ratio = ar === "original" ? "original" : ar; }
+    const tr = (spec.transition && spec.transition.type === "none") || spec.transition === "none" ? null : { type: ["cross", "wipe", "slide", "zoom"].includes(spec.transition && spec.transition.type) ? spec.transition.type : "cross", dur: clamp(numOr(spec.transition && spec.transition.seconds, 0.5), 0.2, 1.5) };
+    if (tr) clips.forEach((c, i) => { const idx = V.clips.indexOf(c); if (idx > 0) V.trans[c.id] = { type: tr.type, dur: Math.min(tr.dur, ms[i].duration - 0.1) }; });
+    V.sel = clips[0].id;
+    if (spec.fade_in !== undefined || pos === "replace") V.fadeIn = clamp(numOr(spec.fade_in, 0.5), 0, 3);
+    if (spec.fade_out !== undefined || pos === "replace") V.fadeOut = clamp(numOr(spec.fade_out, 0.8), 0, 3);
+    resize(); refreshAll();
+    const startAt = pos === "end" ? total() - dur : 0;
+    if (["bokeh", "snow", "confetti", "sparkles", "hearts", "rain"].includes(spec.particles)) addOverlay({ kind: spec.particles, clause: "", k: 0.7 }, AI.analyze(frameCanvasNoOverlays()), { start: startAt, end: startAt + dur });
+    refreshAll(); await seek(Math.min(startAt + Math.min(1.2, ms[0].duration / 2), total() - 0.05));
+    return `Made ${scenes.length} scene${scenes.length > 1 ? "s" : ""} (${short(dur)}) ${pos === "replace" ? "as the whole video" : pos === "start" ? "at the start of the timeline" : "at the end of the timeline"}. The video is now ${short(total())} long.`;
+  }
+  const clipIdx = (i) => { i = Math.round(+i); if (!(i >= 0 && i < V.clips.length)) throw new Error(`There's no clip ${i}. Clips are numbered from 0 to ${V.clips.length - 1}.`); return i; };
+  async function agentTimeline(ops) {
+    if (!V.clips.length) throw new Error("There's nothing on the timeline yet. Add footage, or use make_video to create scenes.");
+    pause(); pushUndo(); const notes = [];
+    for (const o of (Array.isArray(ops) ? ops : []).slice(0, 40)) {
+      const T = total(), op = String(o.op || "");
+      if (op === "trim_start") { const x = Math.min(numOr(o.seconds, 0), T - 0.2); if (x > 0) { cutRange(0, x); notes.push(`trimmed the first ${short(x)}`); } }
+      else if (op === "trim_end") { const x = Math.min(numOr(o.seconds, 0), T - 0.2); if (x > 0) { cutRange(T - x, T); notes.push(`trimmed the last ${short(x)}`); } }
+      else if (op === "keep") { const a = clamp(numOr(o.from, 0), 0, T - 0.2), b = clamp(numOr(o.to, T), a + 0.2, T); cutRange(b, T); cutRange(0, a); notes.push(`kept ${short(a)} to ${short(b)}`); }
+      else if (op === "cut") { const a = clamp(numOr(o.from, 0), 0, T), b = clamp(numOr(o.to, a), a, T); if (b - a >= 0.05 && b - a < T - 0.1) { cutRange(a, b); notes.push(`cut ${short(a)} to ${short(b)}`); } }
+      else if (op === "split") { if (splitAt(clamp(numOr(o.at, 0), 0, T), true)) notes.push(`split at ${short(+o.at)}`); }
+      else if (op === "delete_clip") { const i = clipIdx(o.index); if (V.clips.length === 1) throw new Error("A video needs at least one clip."); const st = startOf(V.clips[i]), L = clipLen(V.clips[i]); V.clips.splice(i, 1); shiftOverlaysForCut(st, st + L); notes.push(`deleted clip ${i}`); }
+      else if (op === "move_clip") { const i = clipIdx(o.index), j = clipIdx(o.to); const [c] = V.clips.splice(i, 1); V.clips.splice(j, 0, c); notes.push(`moved clip ${i} to position ${j}`); }
+      else if (op === "duplicate_clip") { const i = clipIdx(o.index); V.clips.splice(i + 1, 0, { ...V.clips[i], id: uid++ }); notes.push(`duplicated clip ${i}`); }
+      else if (op === "clip") {
+        const c = V.clips[clipIdx(o.index)], m = mediaOf(c);
+        if (o.speed !== undefined) c.speed = clamp(numOr(o.speed, 1), 0.25, 4);
+        if (o.in !== undefined) c.in = clamp(numOr(o.in, 0), 0, c.out - 0.05);
+        if (o.out !== undefined) c.out = clamp(numOr(o.out, c.out), c.in + 0.05, m.duration);
+        if (o.ken_burns !== undefined && m.kind === "image") c.kb = !!o.ken_burns;
+        notes.push(`adjusted clip ${o.index}`);
+      }
+      else if (op === "speed") { setSpeedAll(numOr(o.value, 1)); notes.push(`set playback speed to ${o.value}×`); }
+      else if (op === "fade_in") { V.fadeIn = clamp(numOr(o.seconds, 0.8), 0, T / 2); notes.push(`fade in ${short(V.fadeIn)}`); }
+      else if (op === "fade_out") { V.fadeOut = clamp(numOr(o.seconds, 0.8), 0, T / 2); notes.push(`fade out ${short(V.fadeOut)}`); }
+      else if (op === "aspect") { const ar = RATIOS[o.ratio]; if (ar === undefined) throw new Error("ratio must be one of " + Object.keys(RATIOS).join(", ")); V.ratio = ar; resize(); notes.push(`reframed to ${o.ratio}`); }
+      else if (op === "transitions") {
+        const type = o.type === "none" ? null : ["cross", "wipe", "slide", "zoom"].includes(o.type) ? o.type : "cross", dur = clamp(numOr(o.seconds, 0.8), 0.2, 3);
+        if (o.index !== undefined) { const c = V.clips[clipIdx(o.index)]; if (!type) delete V.trans[c.id]; else V.trans[c.id] = { type, dur: Math.min(dur, clipLen(c) - 0.05) }; }
+        else if (!type) V.trans = {}; else setAllTransitions(type, dur);
+        notes.push(type ? `${type} transitions` : "removed transitions");
+      }
+      else if (op === "mute") { V.muted = !!o.on; applyVolume(); notes.push(o.on ? "muted the original audio" : "unmuted the original audio"); }
+      else if (op === "volume") { V.volume = clamp(numOr(o.value, 1), 0, 2); V.muted = false; applyVolume(); notes.push(`volume ${Math.round(V.volume * 100)}%`); }
+      else if (op === "music_volume") { if (V.music) { V.music.vol = clamp(numOr(o.value, 0.6), 0, 1.5); notes.push(`music volume ${Math.round(V.music.vol * 100)}%`); } else notes.push("there's no music to adjust"); }
+      else if (op === "ken_burns") { const imgs = V.clips.filter((c) => mediaOf(c).kind === "image"); imgs.forEach((c) => (c.kb = o.on !== false)); notes.push(`slow zoom on ${imgs.length} photo(s)`); }
+      else if (op === "remove_silence") { busy(true, "Listening to the sound…"); try { notes.push((await removeSilence(!!o.long)).msg); } finally { busy(false); } }
+      else if (op === "best_moments") { busy(true, "Finding the best moments…"); try { notes.push(await bestParts(numOr(o.seconds, 30))); } finally { busy(false); } }
+      else if (op === "split_scenes") notes.push(await runScenes(true));
+      else if (op === "audio") { ensureAudio(); await analyzeAllAudio(); if (o.fx === "reset") V.sfx = { level: false, hum: false, voice: false, bass: false }; else if (["level", "hum", "voice", "bass"].includes(o.fx)) V.sfx = { ...V.sfx, [o.fx]: true }; else throw new Error("fx must be level, hum, voice, bass or reset"); rebuildAll(); notes.push(`audio: ${o.fx}`); }
+      else if (op === "duck") { if (!musicMedia()) notes.push("no music to duck"); else { V.music.duck = o.on !== false; await analyzeAllAudio(); notes.push("music ducks under speech"); } }
+      else if (op === "remove_overlay") { const n = V.overlays.length; V.overlays = V.overlays.filter((x) => x.id !== +o.id); notes.push(V.overlays.length < n ? `removed overlay ${o.id}` : `no overlay ${o.id}`); }
+      else if (op === "edit_overlay") {
+        const ov = V.overlays.find((x) => x.id === +o.id); if (!ov) throw new Error(`There's no overlay ${o.id}. See the ids from state.`);
+        if (o.start !== undefined || o.end !== undefined) { ov.full = false; ov.start = clamp(numOr(o.start, ov.start), 0, T - 0.1); ov.end = clamp(numOr(o.end, ov.end), ov.start + 0.1, T); }
+        if (o.x !== undefined || o.y !== undefined || o.scale !== undefined) ov.tf = { ...(ov.tf || BASE_TF), x: clamp(numOr(o.x, (ov.tf || BASE_TF).x), -1, 1), y: clamp(numOr(o.y, (ov.tf || BASE_TF).y), -1, 1), s: clamp(numOr(o.scale, (ov.tf || BASE_TF).s), 0.1, 4) };
+        if (o.animation) animPreset(ov, o.animation);
+        notes.push(`edited overlay ${o.id}`);
+      }
+      else throw new Error(`Unknown op "${op}".`);
+    }
+    resize(); refreshAll(); await seek(Math.min(P.t, Math.max(0, total() - 0.05)));
+    return (notes.length ? notes.join("; ") : "No changes") + `. The video is now ${short(total())} long.`;
+  }
+  async function agentText(o) {
+    if (!V.clips.length) throw new Error("There's nothing to put text on yet.");
+    const text = String(o.text || "").trim(); if (!text) throw new Error("text is required.");
+    pushUndo(); const T = total(), pos = ["top", "center", "bottom"].includes(o.position) ? o.position : "bottom";
+    const style = { serif: "", bold: "bold", sans: "sans", handwritten: "handwritten", typewriter: "typewriter" }[o.style] ?? "";
+    const k = o.size === "small" ? 0.45 : o.size === "large" ? 1.6 : o.size === "huge" ? 1.6 : 1;
+    const A = AI.analyze(frameCanvasNoOverlays()), start = clamp(numOr(o.start, 0), 0, T - 0.1), end = o.end !== undefined ? clamp(numOr(o.end, T), start + 0.1, T) : (o.start !== undefined ? Math.min(T, start + 3) : undefined);
+    addOverlay({ kind: "text", text: text.slice(0, 200), clause: `${pos} ${style}`, k, color: okColor(o.color, null) }, A, o.start === undefined && o.end === undefined ? {} : { start, end });
+    const ov = V.overlays[V.overlays.length - 1];
+    if (o.x !== undefined || o.y !== undefined || o.scale !== undefined) ov.tf = { x: clamp(numOr(o.x, 0), -1, 1), y: clamp(numOr(o.y, 0), -1, 1), s: clamp(numOr(o.scale, 1), 0.1, 4), o: 1 };
+    if (o.animation) animPreset(ov, o.animation);
+    V.selOv = ov.id; refreshAll(); redrawSoon();
+    return `Added the text “${text.slice(0, 40)}” (overlay ${ov.id}) from ${short(ov.full ? 0 : ov.start)} to ${short(ov.full ? T : ov.end)}.`;
+  }
+  function agentAdjust(o) {
+    pushUndo();
+    if (o.reset) { V.adj = { ...DEF }; V.grade = 0; }
+    if (o.look) { const L = FE.PRESETS[o.look]; if (!L) throw new Error("Unknown look. Looks: " + Object.keys(FE.PRESETS).join(", ")); V.adj = { ...DEF, ...L }; }
+    for (const [k, v] of Object.entries(o.values || {})) { if (!(k in DEF) || k === "sharpen" || !Number.isFinite(+v)) continue; const [mn, mx] = k in FE.RANGE ? FE.RANGE[k] : [-100, 100]; V.adj[k] = Math.round(clamp(+v, mn, mx)); }
+    if (o.cinematic !== undefined) V.grade = o.cinematic ? 0.6 : 0;
+    syncAdj(); redrawSoon();
+    return "Color adjustments now: " + (Object.entries(V.adj).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(", ") || "none") + (V.grade ? ", cinematic grade on" : "") + ".";
+  }
+  function agentState() {
+    const T = total();
+    const clips = V.clips.map((c, i) => { const m = mediaOf(c); return { index: i, name: cleanName(m.name), kind: m.generated ? "generated scene" : m.kind, starts_at: +startOf(c).toFixed(2), seconds: +clipLen(c).toFixed(2), speed: c.speed, source_in: +c.in.toFixed(2), source_out: +c.out.toFixed(2), transition_in: (V.trans[c.id] && V.trans[c.id].type) || "none" }; });
+    const overlays = V.overlays.map((o) => ({ id: o.id, type: o.type === "media" ? "picture/video on top" : o.type, what: o.name, from: +(o.full ? 0 : o.start).toFixed(2), to: +(o.full ? T : o.end).toFixed(2) }));
+    const mus = musicMedia();
+    return { mode: "video", seconds: +T.toFixed(2), playhead: +P.t.toFixed(2), aspect: V.ratio === "original" ? "original" : +(+V.ratio).toFixed(3), clips, overlays, adjustments: Object.fromEntries(Object.entries(V.adj).filter(([, v]) => v)), cinematic_grade: !!V.grade, fade_in: V.fadeIn || 0, fade_out: V.fadeOut || 0, original_audio_muted: !!V.muted, volume: V.volume,
+      music: mus ? { name: mus.name, volume: V.music.vol, ducks_under_speech: !!V.music.duck } : null, sound_effects: V.sounds.length, no_real_footage: realClips().length === 0 };
+  }
+  async function agentExport() {
+    if (!V.clips.length) throw new Error("There's nothing to export yet.");
+    if (EXP) return "An export is already running.";
+    pause(); const ex = $("#vExport"); if (ex.hidden) return "An export is already running."; ex.click();
+    for (let i = 0; i < 1200; i++) { await new Promise((r) => setTimeout(r, 500)); if (!$("#vExporting") || $("#vExporting").hidden) break; }
+    return $("#vExpResult").textContent.trim() || "Export finished. The file was saved by the browser (check downloads).";
+  }
+
+  window.FEVideo = { V, seek, total, play, pause, addFiles, makeVideo, makeThumbnail, autoEdit, addMusicFile, removeMusic, addSoundFile, frameAnalysis, addCreditsOverlay, realClips, agent: { make: agentMake, timeline: agentTimeline, text: agentText, adjust: agentAdjust, state: agentState, exportNow: agentExport }, switchTab, get time() { return P.t; }, get exporting() { return !!EXP; },
     getAdj: () => ({ ...V.adj }),
     applyLook(adj) { pushUndo(); V.adj = { ...DEF }; for (const k of Object.keys(DEF)) if (typeof adj[k] === "number" && k !== "sharpen") { const [mn, mx] = k in FE.RANGE ? FE.RANGE[k] : [-100, 100]; V.adj[k] = Math.round(clamp(adj[k], mn, mx)); } syncAdj(); redrawSoon(); },
   };

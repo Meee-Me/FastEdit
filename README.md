@@ -115,6 +115,12 @@ The **Connect AI** button (it shows the AI's name once connected) works with Cla
 - **Chat panel:** paste that service's API key and the panel becomes that AI (Claude via the Anthropic SDK; ChatGPT, Gemini, Groq, OpenRouter, Mistral and anything else that uses OpenAI's chat format via plain `fetch`, with a model that sees images and uses tools). Keys are stored per AI in this browser only.
 - **Private link:** one MCP connector link that any AI app with remote MCP support can use (Claude: Settings → Connectors; ChatGPT: Developer mode connectors).
 
+Whichever way it connects, the AI works as itself. It gets precise tools (`agent-tools.mjs`, run by `agent.js` and `video.js`) and a minimal prompt, so it plans, writes, picks colors and timing, and edits the way it would on its own:
+
+- **Video:** `make_video` (scene by scene: its own text, colors, fonts, timing, transitions, particles), `timeline` (trim, cut, split, reorder, speed, fades, aspect, transitions, audio, overlays), `text` (timed overlays with animation), `adjust`, `media` (free music, sounds, photos), `export`.
+- **Photo:** `text` (layers), `shape` (rect, ellipse, gradients), `layers`, `canvas` (crop, rotate, flip, new), `filter`, `adjust`.
+- **Both:** `look` (screenshot and full state), `do` (the built-in on-device assistant, for background removal, effects and thumbnails), `undo`, `mode`.
+
 The sections below describe both. The **Claude** button (menu bar in Photo mode, top right in Video mode) lets Claude see and edit your work in Fast Edit.
 
 - Turn on **Allow Claude to use this tab**, copy your private link, and in Claude add it under Settings → Connectors → Add custom connector.

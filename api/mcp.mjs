@@ -8,6 +8,8 @@
 // commands in a small relay (Supabase), which the user's open Fast Edit tab picks up, runs
 // and answers. The private code in the link is the only thing that connects the two.
 
+import { TOOLS as SHARED, BY_NAME } from "../agent-tools.mjs";
+
 const SUPA = "https://tcrprxgwhfsdkfiatmpe.supabase.co";
 const KEY = "sb_publishable_s2o1OqqvDAPJHv94xmJNRQ_HiZ9nNYO"; // publishable: safe to ship; the relay only exposes 5 locked-down functions
 const VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -19,22 +21,11 @@ const cors = {
 };
 
 const TOOLS = [
-  { name: "fastedit_look", description: "Take a screenshot of what's in the user's Fast Edit editor right now (the photo, or the current video frame) and report what's open. Call this first, and again after edits to check the result.",
-    inputSchema: { type: "object", properties: { at_seconds: { type: "number", description: "Video only: look at this time in the timeline (seconds). Default: the playhead." } }, additionalProperties: false },
-    annotations: { readOnlyHint: true, openWorldHint: false } },
-  { name: "fastedit_do", description: "Tell Fast Edit AI (the editor's on-device assistant) to do something, in plain English, exactly as the user would type it in its chat. Works for both modes. Photo: \"make it warmer\", \"blur the background\", \"add a caption saying Hello\", \"make a thumbnail\". Video: \"trim the first 2 seconds\", \"make it 15 seconds with the best parts\", \"cinematic and vertical for TikTok\", \"find upbeat music\", \"add a whoosh sound\", \"edit it for me\", \"make a video about my trip\". One clear instruction per call works best; then call fastedit_look to check the result. Returns the assistant's reply and a screenshot.",
-    inputSchema: { type: "object", properties: { request: { type: "string", description: "What to do, in plain English." } }, required: ["request"], additionalProperties: false },
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
-  { name: "fastedit_undo", description: "Undo the last change in Fast Edit.", inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
-  { name: "fastedit_mode", description: "Switch the editor between Photo and Video mode.",
-    inputSchema: { type: "object", properties: { mode: { type: "string", enum: ["photo", "video"] } }, required: ["mode"], additionalProperties: false },
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
-  { name: "fastedit_result", description: "Get the result of a slow fastedit_do (one that said it was still running), using the id it gave.",
-    inputSchema: { type: "object", properties: { id: { type: "number" } }, required: ["id"], additionalProperties: false },
-    annotations: { readOnlyHint: true, openWorldHint: false } },
+  ...SHARED.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema, annotations: t.annotations })),
+  { name: "fastedit_result", description: "Get the result of a slow tool call (one that said it was still running), using the id it gave.",
+    inputSchema: { type: "object", properties: { id: { type: "number" } }, required: ["id"], additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } },
 ];
-const TAB_TOOLS = { fastedit_look: "look", fastedit_do: "do", fastedit_undo: "undo", fastedit_mode: "mode" };
+const SLOW = new Set(["fastedit_do", "fastedit_make_video", "fastedit_timeline", "fastedit_media", "fastedit_export"]);
 
 const reply = (body, status = 200, extra = {}) => new Response(body == null ? null : JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store", ...cors, ...extra } });
 const rpcOk = (id, result) => reply({ jsonrpc: "2.0", id, result });
@@ -70,17 +61,15 @@ async function waitFor(s, id, ms) {
 
 async function callTool(s, name, args) {
   if (name === "fastedit_result") return waitFor(s, Math.floor(+args.id), 20000);
-  const tool = TAB_TOOLS[name];
-  if (!tool) return asText(`Unknown tool ${name}.`, true);
+  if (!BY_NAME[name]) return asText(`Unknown tool ${name}.`, true);
   const tab = (await rpc("fe_tab", { p_session: s }))[0];
   if (!tab || Date.now() - new Date(tab.last_seen).getTime() > 20000) {
     return asText("Fast Edit isn't open right now. Ask the user to open https://fast-edit-nine.vercel.app in their browser, tap \"Connect AI\", and turn on the connection. Then try again.", true);
   }
-  if (tool === "do" && !(typeof args.request === "string" && args.request.trim())) return asText("Give a request, like \"make it warmer\".", true);
-  if (tool === "mode" && !["photo", "video"].includes(args.mode)) return asText("mode must be photo or video.", true);
-  const clean = tool === "do" ? { request: String(args.request).slice(0, 1000) } : tool === "mode" ? { mode: args.mode } : tool === "look" && Number.isFinite(+args.at_seconds) ? { at: +args.at_seconds } : {};
-  const id = await rpc("fe_push", { p_session: s, p_tool: tool, p_args: clean });
-  return waitFor(s, id, tool === "do" ? 45000 : 20000);
+  const json = JSON.stringify(args || {});
+  if (json.length > 15000) return asText("That request is too large. Send it in smaller steps.", true);
+  const id = await rpc("fe_push", { p_session: s, p_tool: name.replace(/^fastedit_/, ""), p_args: JSON.parse(json) });
+  return waitFor(s, id, SLOW.has(name) ? 45000 : 20000);
 }
 
 async function handle(msg, s) {
@@ -90,7 +79,7 @@ async function handle(msg, s) {
     const want = params && params.protocolVersion;
     return rpcOk(id, { protocolVersion: VERSIONS.includes(want) ? want : VERSIONS[0], capabilities: { tools: { listChanged: false } },
       serverInfo: { name: "Fast Edit", version: "1.0.0" },
-      instructions: "Fast Edit is a photo and video editor running in the user's browser. Use fastedit_look to see it, fastedit_do to make changes in plain English, and fastedit_look again to check the result." });
+      instructions: "Fast Edit is a photo and video editor running in the user's browser. Use fastedit_look to see their work. Then use your own judgment and creativity: the precise tools (text, colors, shapes, layers, a scene-by-scene video maker, an exact timeline editor, free music and sounds) let you make real edits, and fastedit_do hands short requests to a small built-in assistant for things only it can do (remove or blur a background, animated effects, thumbnails). Look again to check results." });
   }
   if (method === "ping") return rpcOk(id, {});
   if (method === "tools/list") return rpcOk(id, { tools: TOOLS });

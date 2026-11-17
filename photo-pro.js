@@ -342,6 +342,15 @@
     });
   }
 
+  // for AI tools: apply a filter to the active layer without the dialog
+  FE.agentFilter = (id, params) => {
+    const F = FILTERS[id]; if (!F) throw new Error("Unknown filter. Filters: " + Object.keys(FILTERS).join(", "));
+    const a = needLayer(); if (!a) throw new Error("There's no layer to filter.");
+    const p = {}; for (const q of F.params) p[q.k] = Number.isFinite(+(params || {})[q.k]) ? Math.max(q.min, Math.min(q.max, +params[q.k])) : q.v;
+    const before = FE.clone(a.canvas); FE.pushUndo(); a.canvas = mergeSel(a, before, F.run(before, p)); FE.renderLayers(); FE.render();
+    return F.name;
+  };
+
   /* ================= image, layer & file commands ================= */
   function imageSize() {
     const ratio = S.w / S.h;
