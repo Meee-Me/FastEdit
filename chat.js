@@ -171,7 +171,8 @@
     const base = { name: whoEl.textContent, avatar: avatarEl.innerHTML, foot: footEl.textContent };
     function setBrand(b) {
       branded = b || null; host.classList.toggle("claude-brand", !!b); curAvatar = b ? SPARK : BOLT;
-      box.placeholder = b ? (b.placeholder || "Message Claude…") : cfg.placeholder;
+      box.placeholder = b ? (b.placeholder || "Ask Claude…") : cfg.placeholder;
+      box.setAttribute("aria-label", b ? "Ask Claude" : "Message Fast Edit AI"); log.setAttribute("aria-label", b ? "Conversation with Claude" : "Conversation with Fast Edit AI");
       host.querySelectorAll(".msg.ai .chat-avatar").forEach((a) => (a.innerHTML = curAvatar));
       whoEl.textContent = b ? b.name : base.name; avatarEl.innerHTML = b ? SPARK : base.avatar; footEl.textContent = b ? b.foot : base.foot;
       if (b) { statusEl.textContent = b.status; dot.className = "agentdot ok"; } else { statusEl.textContent = "Ready · on your device"; dot.className = "agentdot ok"; }
