@@ -18,6 +18,14 @@
   let code = store.get("fastedit.claude.code");
   let on = store.get("fastedit.claude.on") === "1";
   let lastCall = null, lastErr = null, polling = false, timer = null, busy = false;
+  let seen = store.get("fastedit.claude.seen") === code;
+  const BRAND = { name: "Claude", status: "Connected · editing with you", foot: "Claude is connected. Typing here uses Fast Edit's built-in helper; Claude edits from its own chat.",
+    welcome: "Claude is connected. Ask Claude (in claude.ai) to edit your work and I'll show what it does here. You can still type edits here too." };
+  function brand() {
+    const b = on && seen ? BRAND : null;
+    for (const m of ["photo", "video"]) { const c = window.FEChat && window.FEChat.get(m); if (c && c.setBrand) c.setBrand(b); }
+  }
+  const chatOf = () => window.FEChat.get(mode());
   const newCode = () => { const a = new Uint8Array(24); crypto.getRandomValues(a); return btoa(String.fromCharCode(...a)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
   if (!code || code.length < 32) { code = newCode(); store.set("fastedit.claude.code", code); }
   const link = () => `${location.origin.startsWith("http") && !/localhost|127\.0\.0\.1/.test(location.hostname) ? location.origin : "https://fast-edit-nine.vercel.app"}/api/mcp?s=${code}`;
@@ -51,12 +59,12 @@
   const info = () => ({ mode: mode(), v: 1 });
 
   /* ---------- running commands ---------- */
-  async function chatSend(text) {
+  async function chatSend(text, from) {
     const m = mode(), api = window.FEChat.get(m); if (!api) throw new Error("The chat isn't ready.");
     const host = $(m === "video" ? "#videoChat" : "#photoChat"), sendBtn = host.querySelector(".chat-send");
     for (let i = 0; i < 100 && sendBtn.disabled; i++) await sleep(300);
     const before = host.querySelectorAll(".msg.ai").length;
-    await api.send(text);
+    await api.send(text, { from });
     const msgs = [...host.querySelectorAll(".msg.ai")], last = msgs.length > before ? msgs[msgs.length - 1] : null;
     const body = last && last.querySelector(".msg-body");
     const chips = body ? [...body.querySelectorAll(".msg-chips .chip")].map((c) => c.textContent) : [];
@@ -64,16 +72,17 @@
   }
   async function run(tool, args) {
     if (tool === "look") {
+      chatOf().note("Claude looked at your " + (mode() === "video" ? "video" : "photo"));
       if (mode() === "video" && Number.isFinite(args.at) && window.FEVideo.V.clips.length) { await window.FEVideo.seek(Math.max(0, Math.min(args.at, window.FEVideo.total() - 0.05))); await sleep(300); }
       return { text: describe(), image: shot() };
     }
-    if (tool === "do") { const text = await chatSend(String(args.request || "")); return { text: `${text || "Done."}\n\n${describe()}`, image: shot() }; }
+    if (tool === "do") { const text = await chatSend(String(args.request || ""), "Claude"); return { text: `${text || "Done."}\n\n${describe()}`, image: shot() }; }
     if (tool === "undo") {
-      const m = mode(), api = window.FEChat.get(m); const ok = api && api.cfg.undo();
+      const m = mode(), api = window.FEChat.get(m); const ok = api && api.cfg.undo(); api.note(ok ? "Claude undid the last change" : "Claude tried to undo, but there was nothing to undo");
       await sleep(200); return { text: (ok ? "Undid the last change. " : "Nothing to undo. ") + describe(), image: shot() };
     }
     if (tool === "mode") {
-      if (args.mode !== mode()) { $(`[data-app-mode="${args.mode}"]`).click(); await sleep(500); }
+      if (args.mode !== mode()) { $(`[data-app-mode="${args.mode}"]`).click(); await sleep(500); chatOf().note("Claude switched to " + args.mode + " mode"); }
       return { text: `Now in ${mode()} mode. ${describe()}`, image: shot() };
     }
     return { error: true, text: "That command isn't supported by this version of Fast Edit." };
@@ -84,6 +93,7 @@
       const cmds = (await rpc("fe_take", { p_session: code, p_info: info() })) || [];
       lastErr = null;
       for (const c of cmds) {
+        if (!seen) { seen = true; store.set("fastedit.claude.seen", code); brand(); }
         busy = true; render();
         let res;
         try { res = await run(c.tool, c.args || {}); lastCall = { tool: c.tool, at: Date.now() }; }
@@ -97,7 +107,7 @@
   function start() { stop(); if (!on) return; tick(); timer = setInterval(tick, document.hidden ? 4000 : 1500); }
   function stop() { if (timer) clearInterval(timer); timer = null; }
   document.addEventListener("visibilitychange", () => { if (on) start(); });
-  function setOn(v) { on = v; store.set("fastedit.claude.on", v ? "1" : "0"); if (v) start(); else stop(); render(); updateBtn(); }
+  function setOn(v) { on = v; store.set("fastedit.claude.on", v ? "1" : "0"); if (v) start(); else stop(); brand(); render(); updateBtn(); }
 
   /* ---------- UI ---------- */
   document.body.insertAdjacentHTML("beforeend", `
@@ -128,7 +138,7 @@
     $("#clmOn").onchange = (e) => setOn(e.target.checked);
     $("#clmCopy").onclick = async () => { try { await navigator.clipboard.writeText(link()); FE.toast("Link copied"); } catch { const i = $("#clmLink"); i.focus(); i.select(); FE.toast("Select the link and copy it"); } };
     $("#clmLink").onfocus = (e) => e.target.select();
-    $("#clmNew").onclick = () => { if (!confirm("Make a new link? The current one will stop working.")) return; code = newCode(); store.set("fastedit.claude.code", code); lastCall = null; render(); FE.toast("New link made. Add it in Claude."); };
+    $("#clmNew").onclick = () => { if (!confirm("Make a new link? The current one will stop working.")) return; code = newCode(); store.set("fastedit.claude.code", code); store.del("fastedit.claude.seen"); seen = false; lastCall = null; brand(); render(); FE.toast("New link made. Add it in Claude."); };
   }
   function open() { dlg.hidden = false; render(); if (!on) $("#clmOn")?.focus(); }
   function close() { dlg.hidden = true; }
@@ -141,7 +151,7 @@
   const menu = $(".menubar"); let mb = null;
   if (menu) { mb = document.createElement("button"); mb.type = "button"; mb.className = "menu-btn clm-menu"; mb.onclick = open; menu.append(mb); }
   function updateBtn() { const t = on ? "Claude ●" : "Claude"; btn.textContent = t; if (mb) mb.textContent = t; btn.classList.toggle("clm-on", on); if (mb) mb.classList.toggle("clm-on", on); }
-  updateBtn(); if (on) start();
+  updateBtn(); brand(); if (on) start();
 
   window.FEClaude = { open, close, get on() { return on; } };
 })();

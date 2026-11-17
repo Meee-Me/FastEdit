@@ -11,8 +11,10 @@
   const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
+  let curAvatar = null;
   const BOLT = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2 5 13.5h5.5L9 22l9.5-12.5H13z" fill="currentColor"/></svg>';
 
+  curAvatar = BOLT;
   function mount(host, cfg) {
     host.classList.add("chat");
     host.innerHTML = `
@@ -36,13 +38,14 @@
 
     const scroll = () => { log.scrollTop = log.scrollHeight; };
     function clearChips() { log.querySelectorAll(".msg-chips").forEach((c) => c.remove()); }
-    function userMsg(text, files) {
-      clearChips(); const m = document.createElement("div"); m.className = "msg user";
+    function userMsg(text, files, from) {
+      clearChips(); const m = document.createElement("div"); m.className = "msg user" + (from ? " from-agent" : "");
+      if (from) { const l = document.createElement("div"); l.className = "msg-from"; l.textContent = from + " asked"; m.append(l); }
       if (files && files.length) { const f = document.createElement("div"); f.className = "msg-files"; for (const x of files) { const c = document.createElement("span"); c.className = "file-chip"; c.textContent = fileLabel(x); f.append(c); } m.append(f); }
       if (text) { const t = document.createElement("div"); t.textContent = text; m.append(t); }
       log.append(m); scroll();
     }
-    function typing() { const m = document.createElement("div"); m.className = "msg ai"; m.innerHTML = `<span class="chat-avatar sm">${BOLT}</span><div class="msg-body"><span class="typing"><i></i><i></i><i></i></span></div>`; log.append(m); scroll(); return m; }
+    function typing() { const m = document.createElement("div"); m.className = "msg ai"; m.innerHTML = `<span class="chat-avatar sm">${curAvatar}</span><div class="msg-body"><span class="typing"><i></i><i></i><i></i></span></div>`; log.append(m); scroll(); return m; }
     async function aiMsg(el, reply) {
       const body = el.querySelector(".msg-body"); body.innerHTML = "";
       const textEl = document.createElement("div"); textEl.className = "msg-text"; body.append(textEl);
@@ -76,8 +79,8 @@
     }
     function welcome() {
       log.innerHTML = "";
-      const el = document.createElement("div"); el.className = "msg ai"; el.innerHTML = `<span class="chat-avatar sm">${BOLT}</span><div class="msg-body"></div>`; log.append(el);
-      aiMsg(el, { text: cfg.welcome, chips: cfg.starters });
+      const el = document.createElement("div"); el.className = "msg ai"; el.innerHTML = `<span class="chat-avatar sm">${curAvatar}</span><div class="msg-body"></div>`; log.append(el);
+      aiMsg(el, { text: branded ? branded.welcome : cfg.welcome, chips: cfg.starters });
     }
 
     async function respond(text) {
@@ -142,12 +145,12 @@
       host.addEventListener("dragleave", (e) => { if (e.target === host || !host.contains(e.relatedTarget)) host.classList.remove("drop-on"); });
       host.addEventListener("drop", (e) => { e.preventDefault(); host.classList.remove("drop-on"); addPending(e.dataTransfer.files); });
     }
-    async function send(text) {
-      text = String(text || "").trim();
+    async function send(text, opts) {
+      opts = opts || {}; text = String(text || "").trim();
       const files = pending; pending = []; renderTray();
       if ((!text && !files.length) || working) { if (files.length) { pending = files; renderTray(); } return; }
       working = true; sendBtn.disabled = true; box.value = ""; autosize();
-      userMsg(text, files);
+      userMsg(text, files, opts.from);
       const el = typing();
       await new Promise((r) => setTimeout(r, 250));
       let reply;
@@ -160,9 +163,21 @@
     box.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(box.value); } });
     form.addEventListener("submit", (e) => { e.preventDefault(); send(box.value); });
     host.querySelector(".chat-new").onclick = () => { mem.last = null; welcome(); box.focus(); };
-    function setStatus(text, state) { statusEl.textContent = text; dot.className = "agentdot" + (state ? " " + state : ""); }
+    let branded = null;
+    function setStatus(text, state) { if (branded) return; statusEl.textContent = text; dot.className = "agentdot" + (state ? " " + state : ""); }
+    const whoEl = host.querySelector(".chat-who b"), avatarEl = host.querySelector(".chat-head .chat-avatar"), footEl = host.querySelector(".chat-foot");
+    const SPARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M2 12h20M5 5l14 14M19 5L5 19" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>';
+    const base = { name: whoEl.textContent, avatar: avatarEl.innerHTML, foot: footEl.textContent };
+    function setBrand(b) {
+      branded = b || null; host.classList.toggle("claude-brand", !!b); curAvatar = b ? SPARK : BOLT;
+      box.placeholder = b ? "Type an edit here, or ask Claude in claude.ai…" : cfg.placeholder;
+      host.querySelectorAll(".msg.ai .chat-avatar").forEach((a) => (a.innerHTML = curAvatar));
+      whoEl.textContent = b ? b.name : base.name; avatarEl.innerHTML = b ? SPARK : base.avatar; footEl.textContent = b ? b.foot : base.foot;
+      if (b) { statusEl.textContent = b.status; dot.className = "agentdot ok"; } else { statusEl.textContent = "Ready · on your device"; dot.className = "agentdot ok"; }
+    }
+    function note(text) { const n = document.createElement("div"); n.className = "msg-note"; n.textContent = text; log.append(n); scroll(); }
     welcome();
-    const api = { send, setStatus, welcome, mem, cfg, attach: (files) => addPending(files) };
+    const api = { send, setStatus, welcome, mem, cfg, attach: (files) => addPending(files), setBrand, note };
     chats[cfg.mode] = api;
     return api;
   }
