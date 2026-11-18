@@ -68,6 +68,9 @@ async function callTool(s, name, args) {
     if (!tab) return asText("Fast Edit isn't open. Ask the user to open https://fast-edit-nine.vercel.app, tap \"Connect AI\", and turn on the connection.", true);
     const open = Date.now() - new Date(tab.last_seen).getTime() < 20000, after = Number.isFinite(+args.after) ? +args.after : 0;
     const msgs = ((tab.info && tab.info.inbox) || []).filter((m) => m.seq > after);
+    if (msgs.length && open) { // tell the open tab these were read, so Fast Edit AI doesn't also do them
+      try { await rpc("fe_push", { p_session: s, p_tool: "inbox_read", p_args: { upto: msgs[msgs.length - 1].seq } }); } catch {}
+    }
     const body = msgs.length ? msgs.map((m) => `#${m.seq} (${m.mode} mode): ${m.text}`).join("\n") : "No new messages.";
     return asText(`${body}${msgs.length ? `\n\n(latest seq: ${msgs[msgs.length - 1].seq})` : ""}${open ? "" : "\n\nNote: Fast Edit isn't open in the browser right now, so edits won't work until the user opens it."}`);
   }

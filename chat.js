@@ -178,13 +178,16 @@
       if (b) { statusEl.textContent = b.status; dot.className = "agentdot ok"; } else { statusEl.textContent = "Ready · on your device"; dot.className = "agentdot ok"; }
       if (log.children.length <= 1) welcome(); // still just the greeting: say it in the right voice
     }
+    async function say(reply) { // post a reply that wasn't asked for in this panel (e.g. a fallback answer)
+      const el = document.createElement("div"); el.className = "msg ai"; el.innerHTML = `<span class="chat-avatar sm">${curAvatar}</span><div class="msg-body"></div>`; log.append(el); await aiMsg(el, reply);
+    }
     function note(text) {
       const n = document.createElement("div"); n.className = "msg-note"; n.textContent = text;
       const typ = log.querySelector(".msg.ai:last-child .typing"), anchor = typ && typ.closest(".msg");
       if (anchor) log.insertBefore(n, anchor); else log.append(n); scroll();
     }
     welcome();
-    const api = { send, setStatus, welcome, mem, cfg, attach: (files) => addPending(files), setBrand, note, run: (t) => respond(t, true), host };
+    const api = { send, setStatus, welcome, mem, cfg, attach: (files) => addPending(files), setBrand, note, say, run: (t) => respond(t, true), host };
     chats[cfg.mode] = api;
     return api;
   }

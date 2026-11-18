@@ -49,8 +49,8 @@
     }
     if (on) {
       const n = nameOf(mcpAgent);
-      return { name: n, status: "Connected · messages go to " + n, foot: `${n} is connected through your link. What you type here is sent to ${n}: tell ${n} (in ${appOf(mcpAgent)}) to “check Fast Edit”. To use Fast Edit AI here again, turn the connection off.`, placeholder: `Ask ${n}…`,
-        welcome: `${n} is connected. Type what you want here, then tell ${n} (in ${appOf(mcpAgent)}) to “check Fast Edit”: it reads your message and edits your work.` };
+      return { name: n, status: "Connected · messages go to " + n, foot: `${n} is connected through your link. What you type here is sent to ${n}. If ${n} doesn't pick it up in a few seconds, Fast Edit AI does it. For ${n} to answer every time on its own, add an API key.`, placeholder: `Ask ${n}…`,
+        welcome: `${n} is connected. Type what you want here, then tell ${n} (in ${appOf(mcpAgent)}) to “check Fast Edit”. If ${n} doesn't pick it up after a few seconds, Fast Edit AI does it.` };
     }
     return null;
   }
@@ -82,10 +82,23 @@
   // messages typed in the panel while an AI is connected through the link wait here, for the AI to read (fastedit_inbox)
   let inbox = [], seq = Number(store.get("fastedit.claude.seq") || 0);
   const info = () => { const o = { mode: mode(), v: 1, seq, inbox: [...inbox] }; while (JSON.stringify(o).length > 3600 && o.inbox.length) o.inbox.shift(); return o; };
+  const FALLBACK_MS = window.__FE_FALLBACK_MS || 25000, pending = new Map();
   async function relay(text, c, m) {
-    const n = nameOf(mcpAgent);
-    inbox.push({ seq: ++seq, at: new Date().toISOString(), mode: m, text: String(text).slice(0, 600) }); inbox = inbox.slice(-6); store.set("fastedit.claude.seq", String(seq));
-    return { text: `Sent to ${n}. Now tell ${n} (in ${appOf(mcpAgent)}) to **check Fast Edit**, and it will read this and act on it.` };
+    const n = nameOf(mcpAgent), id = ++seq;
+    inbox.push({ seq: id, at: new Date().toISOString(), mode: m, text: String(text).slice(0, 600) }); inbox = inbox.slice(-6); store.set("fastedit.claude.seq", String(seq));
+    pending.set(id, setTimeout(() => fallback(id, String(text), m), FALLBACK_MS));
+    return { text: `Sent to ${n}. Tell ${n} (in ${appOf(mcpAgent)}) to **check Fast Edit** and it acts on this. If it hasn't picked this up in ${Math.round(FALLBACK_MS / 1000)} seconds, Fast Edit AI does it for you.` };
+  }
+  async function fallback(id, text, m) { // the AI didn't read the message in time, so Fast Edit AI does it
+    pending.delete(id); const i = inbox.findIndex((x) => x.seq === id); if (i < 0) return; inbox.splice(i, 1);
+    const c = window.FEChat.get(m); if (!c) return;
+    try { const rep = await c.run(text); await c.say({ ...rep, text: `${nm()} hasn't picked this up, so Fast Edit AI did it:\n\n${rep.text || "Done."}` }); }
+    catch (e) { await c.say({ text: `${nm()} hasn't picked this up, and Fast Edit AI couldn't do it: ${e && e.message ? e.message : "unknown error"}` }); }
+  }
+  function markRead(upTo) { // the AI read its inbox: no fallback for those messages
+    const read = inbox.filter((x) => x.seq <= upTo); if (!read.length) return;
+    for (const x of read) { clearTimeout(pending.get(x.seq)); pending.delete(x.seq); }
+    inbox = inbox.filter((x) => x.seq > upTo); chatOf().note(`${nm()} read your message${read.length > 1 ? "s" : ""}`);
   }
 
   /* ---------- running commands ---------- */
@@ -101,6 +114,7 @@
     return (body ? body.innerText.replace(/\n{2,}/g, "\n").trim() : "") + (chips.length ? `\n(Suggested follow-ups: ${chips.join(" | ")})` : "");
   }
   async function run(tool, args) {
+    if (tool === "inbox_read") { markRead(+args.upto || 0); return { text: "ok" }; }
     if (tool === "look") {
       if (mode() === "video" && Number.isFinite(args.at) && window.FEVideo.V.clips.length) { await window.FEVideo.seek(Math.max(0, Math.min(args.at, window.FEVideo.total() - 0.05))); await sleep(300); }
       return { text: describe(), image: shot() };
@@ -122,7 +136,7 @@
       const cmds = (await rpc("fe_take", { p_session: code, p_info: info() })) || [];
       lastErr = null;
       for (const c of cmds) {
-        if (c.tool !== "do") noteFor(chatOf(), "fastedit_" + c.tool, c.args || {});
+        if (c.tool !== "do" && c.tool !== "inbox_read") noteFor(chatOf(), "fastedit_" + c.tool, c.args || {});
         if (!seen) { seen = true; store.set("fastedit.claude.seen", code); brand(); }
         busy = true; refreshStatus();
         let res;
@@ -306,6 +320,7 @@ Two things about the editor: its tools make precise changes (text, colors, shape
       ${has ? `<div class="clm-row"><label class="check"><input type="checkbox" id="clmUseKey" ${active === prov ? "checked" : ""}> ${esc(n)} answers in the chat panel</label><button class="btn sm" id="clmKeyDel">Remove key</button></div>${keyMsg}`
         : `<div class="clm-link"><input type="password" id="clmKey" placeholder="Paste your API key (${esc(P.keyHint)})" autocomplete="off" aria-label="${esc(n)} API key"><button class="btn sm primary" id="clmKeySave">Save</button></div>${keyMsg}`}
       <div class="label" style="margin-top:18px">2. Or: let an AI app edit this tab (private link)</div>
+      <p class="hint" style="margin-top:0">An AI app can't be woken up from here: it acts when you talk to it. With the link on, what you type in Fast Edit waits for the AI to read it (tell it to “check Fast Edit”); if it doesn't within a few seconds, Fast Edit AI does it. For an AI that answers every message on its own, use an API key in section 1.</p>
       <div class="clm-field"><label for="clmAgent">AI app</label><select id="clmAgent">${opt("a", mcpAgent)}</select></div>
       <div class="clm-row"><label class="check"><input type="checkbox" id="clmOn" ${on ? "checked" : ""}> Allow ${esc(mn)} to use this tab</label><span id="clmStatus" class="clm-status ${statusInfo()[0]}">${esc(statusInfo()[1])}</span></div>
       <div class="label">Your private connector link</div>
