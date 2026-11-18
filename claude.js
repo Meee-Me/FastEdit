@@ -38,6 +38,7 @@
   const modelOf = (p) => getf(p, "model") || PROV[p].model || "";
   const vendorOf = (p) => { if (p !== "other") return PROV[p].vendor; try { return new URL(baseOf(p)).hostname; } catch { return PROV.other.vendor; } };
   const chatActive = () => !!active && !!keyOf(active);
+  const handles = () => chatActive() || on; // an AI is connected, so what you type here goes to it
   const nm = () => nameOf(chatActive() ? active : mcpAgent);
   const appOf = (p) => (p === "claude" ? "claude.ai" : p === "chatgpt" ? "chatgpt.com" : "its app");
   function brandFor() {
@@ -48,8 +49,8 @@
     }
     if (on) {
       const n = nameOf(mcpAgent);
-      return { name: n, status: "Connected · editing with you", foot: `${n} is connected. Typing here uses Fast Edit's built-in helper; ${n} edits from its own chat.`, placeholder: `Ask ${n} in ${appOf(mcpAgent)}, or type an edit here…`,
-        welcome: `${n} is connected. Ask ${n} (in ${appOf(mcpAgent)}) to edit your work, and I'll show what it does here. You can also type an edit here.` };
+      return { name: n, status: "Connected · messages go to " + n, foot: `${n} is connected through your link. What you type here is sent to ${n}: tell ${n} (in ${appOf(mcpAgent)}) to “check Fast Edit”. To use Fast Edit AI here again, turn the connection off.`, placeholder: `Ask ${n}…`,
+        welcome: `${n} is connected. Type what you want here, then tell ${n} (in ${appOf(mcpAgent)}) to “check Fast Edit”: it reads your message and edits your work.` };
     }
     return null;
   }
@@ -78,7 +79,14 @@
   let toolsMod = null; // the tool definitions (agent-tools.mjs), loaded on first use
   const loadTools = () => (toolsMod ||= import("./agent-tools.mjs").catch((e) => { toolsMod = null; throw e; }));
   const noteFor = async (c, name, args) => { try { const { LABELS } = await loadTools(); const f = LABELS[name]; if (f) c.note(`${nm()} ${f(args || {})}`); } catch {} };
-  const info = () => ({ mode: mode(), v: 1 });
+  // messages typed in the panel while an AI is connected through the link wait here, for the AI to read (fastedit_inbox)
+  let inbox = [], seq = Number(store.get("fastedit.claude.seq") || 0);
+  const info = () => { const o = { mode: mode(), v: 1, seq, inbox: [...inbox] }; while (JSON.stringify(o).length > 3600 && o.inbox.length) o.inbox.shift(); return o; };
+  async function relay(text, c, m) {
+    const n = nameOf(mcpAgent);
+    inbox.push({ seq: ++seq, at: new Date().toISOString(), mode: m, text: String(text).slice(0, 600) }); inbox = inbox.slice(-6); store.set("fastedit.claude.seq", String(seq));
+    return { text: `Sent to ${n}. Now tell ${n} (in ${appOf(mcpAgent)}) to **check Fast Edit**, and it will read this and act on it.` };
+  }
 
   /* ---------- running commands ---------- */
   async function chatSend(text, from) {
@@ -260,7 +268,7 @@ Two things about the editor: its tools make precise changes (text, colors, shape
     const img = edited ? shot(720) : null;
     return { text: out, ...(img ? { image: "data:image/jpeg;base64," + img, imageAlt: "How it looks now" } : {}) };
   }
-  const chat = (text, c, m) => (active === "claude" ? claudeChat(text, c, m) : openaiChat(active, text, c, m));
+  const chat = (text, c, m) => (!chatActive() ? relay(text, c, m) : active === "claude" ? claudeChat(text, c, m) : openaiChat(active, text, c, m));
 
   /* ---------- UI ---------- */
   document.body.insertAdjacentHTML("beforeend", `
@@ -354,5 +362,5 @@ Two things about the editor: its tools make precise changes (text, colors, shape
   }
   updateBtn(); brand(); if (on) start();
 
-  window.FEClaude = { open, close, chat, chatActive, get on() { return on; } };
+  window.FEClaude = { open, close, chat, chatActive, handles, get on() { return on; } };
 })();

@@ -121,6 +121,13 @@
     try {
       if (PHOTO_ONLY.has(name)) await ensureMode("photo"); else if (VIDEO_ONLY.has(name)) await ensureMode("video");
       let text;
+      if (name === "fastedit_spotify") {
+        const link = (String(a.url || "").match(/https:\/\/open\.spotify\.com\/(?:intl-[a-z-]+\/)?track\/[A-Za-z0-9]{22}|spotify:track:[A-Za-z0-9]{22}/) || [])[0];
+        if (!link) fail("That isn't a Spotify song link. It should look like https://open.spotify.com/track/…");
+        if (!window.FEMarket || !window.FEMarket.spotify) fail("The Marketplace isn't loaded yet.");
+        const d = await window.FEMarket.spotify(link);
+        return { text: `Spotify song: “${d.title}” by ${d.artist}${d.year ? ` (${d.year})` : ""}${d.album && d.album !== d.title ? `, from “${d.album}”` : ""}${d.duration ? `, ${Math.floor(d.duration / 60)}:${String(d.duration % 60).padStart(2, "0")} long` : ""}. Artist genres: ${d.genres.length ? d.genres.join(", ") : "unknown"}. Spotify's audio can't be used in a video. Closest style: ${d.style.label}; free-music search “${d.style.query}”; composer mood “${d.style.mood}”. Next: fastedit_media with find_music (that query) or compose_music (that mood).` };
+      }
       switch (name) {
         case "fastedit_make_video": text = await window.FEVideo.agent.make(a); break;
         case "fastedit_timeline": text = await window.FEVideo.agent.timeline(a.ops); break;

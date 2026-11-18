@@ -84,7 +84,7 @@
     }
 
     async function respond(text, internal) {
-      if (!internal && window.FEClaude && window.FEClaude.chatActive()) return await window.FEClaude.chat(text, chats[cfg.mode], cfg.mode);
+      if (!internal && window.FEClaude && window.FEClaude.handles()) return await window.FEClaude.chat(text, chats[cfg.mode], cfg.mode);
       if (!AI.ready) { setStatus("Learning on your device…"); await AI.train(); }
       const r = AI.converse(text, cfg.mode);
       const followChips = (extra) => [...(extra || []).slice(0, 2), "Stronger", "A bit less", "Undo that"];

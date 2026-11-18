@@ -25,6 +25,8 @@ const TOOLS = [
   { name: "fastedit_result", description: "Get the result of a slow tool call (one that said it was still running), using the id it gave.",
     inputSchema: { type: "object", properties: { id: { type: "number" } }, required: ["id"], additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } },
 ];
+TOOLS.push({ name: "fastedit_inbox", description: "Read what the user typed in Fast Edit's chat panel for you. Call it whenever the user tells you to check Fast Edit, and at the start of a session. Then do what they asked with the other fastedit tools. Pass after = the highest seq you've already seen to get only new messages.",
+  inputSchema: { type: "object", properties: { after: { type: "number", description: "Only messages newer than this seq." } }, additionalProperties: false }, annotations: { readOnlyHint: true, openWorldHint: false } });
 const SLOW = new Set(["fastedit_do", "fastedit_make_video", "fastedit_timeline", "fastedit_media", "fastedit_export"]);
 
 const reply = (body, status = 200, extra = {}) => new Response(body == null ? null : JSON.stringify(body), { status, headers: { "content-type": "application/json", "cache-control": "no-store", ...cors, ...extra } });
@@ -61,6 +63,14 @@ async function waitFor(s, id, ms) {
 
 async function callTool(s, name, args) {
   if (name === "fastedit_result") return waitFor(s, Math.floor(+args.id), 20000);
+  if (name === "fastedit_inbox") {
+    const tab = (await rpc("fe_tab", { p_session: s }))[0];
+    if (!tab) return asText("Fast Edit isn't open. Ask the user to open https://fast-edit-nine.vercel.app, tap \"Connect AI\", and turn on the connection.", true);
+    const open = Date.now() - new Date(tab.last_seen).getTime() < 20000, after = Number.isFinite(+args.after) ? +args.after : 0;
+    const msgs = ((tab.info && tab.info.inbox) || []).filter((m) => m.seq > after);
+    const body = msgs.length ? msgs.map((m) => `#${m.seq} (${m.mode} mode): ${m.text}`).join("\n") : "No new messages.";
+    return asText(`${body}${msgs.length ? `\n\n(latest seq: ${msgs[msgs.length - 1].seq})` : ""}${open ? "" : "\n\nNote: Fast Edit isn't open in the browser right now, so edits won't work until the user opens it."}`);
+  }
   if (!BY_NAME[name]) return asText(`Unknown tool ${name}.`, true);
   const tab = (await rpc("fe_tab", { p_session: s }))[0];
   if (!tab || Date.now() - new Date(tab.last_seen).getTime() > 20000) {

@@ -121,6 +121,9 @@ Whichever way it connects, the AI works as itself. It gets precise tools (`agent
 - **Photo:** `text` (layers), `shape` (rect, ellipse, gradients), `layers`, `canvas` (crop, rotate, flip, new), `filter`, `adjust`.
 - **Both:** `look` (screenshot and full state), `do` (the built-in on-device assistant, for background removal, effects and thumbnails), `undo`, `mode`.
 
+- **Spotify:** `spotify` reads a song link (title, artist, genres) so the AI can pick similar free music; Spotify's audio itself is never used.
+- **Messages:** with an API key, what you type in the panel goes straight to that AI. With the private link, it goes to the AI's inbox (`inbox` tool, via the relay's heartbeat) and you tell the AI to "check Fast Edit".
+
 The sections below describe both. The **Claude** button (menu bar in Photo mode, top right in Video mode) lets Claude see and edit your work in Fast Edit.
 
 - Turn on **Allow Claude to use this tab**, copy your private link, and in Claude add it under Settings → Connectors → Add custom connector.

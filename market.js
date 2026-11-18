@@ -421,5 +421,5 @@
     async addCredits() { if (!credits.length) return { text: "There's nothing to credit yet: you haven't used any Creative Commons media that needs it." }; toVideo(); window.FEVideo.addCreditsOverlay(credits.map((c) => `${c.kind === "music" ? "Music" : c.kind === "sound" ? "Sound" : "Photo"}: ${c.title} · ${c.creator} · ${c.license.replace(/ \(.+\)$/, "")}`).join("\n")); return { text: `I added the credits for ${credits.length} item${credits.length > 1 ? "s" : ""} to the last 4 seconds of the video.` }; },
   };
 
-  window.FEMarket = { open, close, search, download, ai, credits: () => credits.slice(), useFont };
+  window.FEMarket = { open, close, search, download, ai, spotify: spotifyInfo, credits: () => credits.slice(), useFont };
 })();
