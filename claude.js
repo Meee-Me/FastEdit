@@ -23,8 +23,13 @@
   const PROV = {
     claude: { name: "Claude", vendor: "Anthropic", site: "console.anthropic.com", keyOk: (k) => /^sk-ant-[A-Za-z0-9_-]{20,}$/.test(k), keyHint: "sk-ant-…" },
     chatgpt: { name: "ChatGPT", vendor: "OpenAI", site: "platform.openai.com", base: "https://api.openai.com/v1", model: "gpt-5", keyOk: (k) => /^sk-[A-Za-z0-9_-]{20,}$/.test(k), keyHint: "sk-…" },
+    gemini: { name: "Gemini", vendor: "Google", site: "aistudio.google.com", base: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.5-flash", keyOk: (k) => k.length >= 20, keyHint: "AIza…", app: "gemini.google.com" },
+    groq: { name: "Groq", vendor: "Groq", site: "console.groq.com", base: "https://api.groq.com/openai/v1", model: "", keyOk: (k) => k.length >= 20, keyHint: "gsk_…" },
+    openrouter: { name: "OpenRouter", vendor: "OpenRouter", site: "openrouter.ai", base: "https://openrouter.ai/api/v1", model: "", keyOk: (k) => k.length >= 20, keyHint: "sk-or-…" },
+    mistral: { name: "Mistral", vendor: "Mistral", site: "console.mistral.ai", base: "https://api.mistral.ai/v1", model: "", keyOk: (k) => k.length >= 16, keyHint: "API key" },
     other: { name: "AI", vendor: "the AI service", keyOk: (k) => k.length >= 8, keyHint: "API key" },
   };
+  const ORDER = ["claude", "chatgpt", "gemini", "groq", "openrouter", "mistral", "other"];
   const getf = (p, k) => store.get(`fastedit.ai.${p}.${k}`) || "", setf = (p, k, v) => store.set(`fastedit.ai.${p}.${k}`, v);
   const keyOf = (p) => getf(p, "key");
   { const old = store.get("fastedit.claude.key"); // earlier versions stored a Claude key here
@@ -34,13 +39,13 @@
   let active = store.get("fastedit.ai.active") || ""; if (!PROV[active] || !keyOf(active)) active = "";
   let mcpAgent = PROV[store.get("fastedit.mcp.agent")] ? store.get("fastedit.mcp.agent") : "claude";
   const nameOf = (p) => (p === "other" ? getf("other", "name") || "AI" : PROV[p].name);
-  const baseOf = (p) => (p === "chatgpt" ? window.__FE_OPENAI_BASE || PROV.chatgpt.base : getf(p, "base")).replace(/\/+$/, "");
+  const baseOf = (p) => ((window.__FE_BASES && window.__FE_BASES[p]) || (p === "chatgpt" && window.__FE_OPENAI_BASE) || PROV[p].base || getf(p, "base")).replace(/\/+$/, "");
   const modelOf = (p) => getf(p, "model") || PROV[p].model || "";
   const vendorOf = (p) => { if (p !== "other") return PROV[p].vendor; try { return new URL(baseOf(p)).hostname; } catch { return PROV.other.vendor; } };
   const chatActive = () => !!active && !!keyOf(active);
   const handles = () => chatActive() || on; // an AI is connected, so what you type here goes to it
   const nm = () => nameOf(chatActive() ? active : mcpAgent);
-  const appOf = (p) => (p === "claude" ? "claude.ai" : p === "chatgpt" ? "chatgpt.com" : "its app");
+  const appOf = (p) => (p === "claude" ? "claude.ai" : PROV[p].app || (p === "chatgpt" ? "chatgpt.com" : "its app"));
   function brandFor() {
     if (chatActive()) {
       const n = nameOf(active);
@@ -304,10 +309,10 @@ Two things about the editor: its tools make precise changes (text, colors, shape
     const b = $("#clmBody"); if (!b || dlg.hidden) return;
     const P = PROV[prov], n = nameOf(prov), has = !!keyOf(prov), mn = nameOf(mcpAgent);
     const keyMsg = keyErr ? `<span class="clm-status err">${esc(keyErr)}</span>` : "";
-    const opt = (id, cur) => ["claude", "chatgpt", "other"].map((p) => `<option value="${p}" ${p === cur ? "selected" : ""}>${p === "other" ? "Another AI (Gemini, Groq, …)" : PROV[p].name}</option>`).join("");
-    const hint = prov === "claude" ? `Needs a Claude API key from <b>console.anthropic.com</b>.` : prov === "chatgpt" ? `Needs an OpenAI API key from <b>platform.openai.com</b>.`
-      : `Works with any AI service that uses OpenAI's chat format, such as Google Gemini (address <code>https://generativelanguage.googleapis.com/v1beta/openai</code>), Groq, OpenRouter or Mistral. Use a model that can see images and use tools, and a service that allows calls from a web page.`;
-    const fields = prov === "chatgpt" ? `<div class="clm-field"><label for="clmModel">Model</label><input id="clmModel" value="${esc(modelOf("chatgpt"))}" placeholder="${esc(PROV.chatgpt.model)}" autocomplete="off" list="clmModels"><datalist id="clmModels"></datalist></div>`
+    const opt = (id, cur) => ORDER.map((p) => `<option value="${p}" ${p === cur ? "selected" : ""}>${p === "other" ? "Another AI (any service)" : PROV[p].name}</option>`).join("");
+    const hint = prov === "other" ? `Works with any AI service that uses OpenAI's chat format. Use a model that can see images and use tools, and a service that allows calls from a web page.`
+      : `Needs ${prov === "claude" ? "a Claude" : "a " + n} API key from <b>${esc(P.site)}</b>.${prov === "gemini" ? " Google has offered a free tier for Gemini keys (check its current limits)." : ""}`;
+    const fields = P.base ? `<div class="clm-field"><label for="clmModel">Model</label><input id="clmModel" value="${esc(modelOf(prov))}" placeholder="${esc(P.model || "choose a model")}" autocomplete="off" list="clmModels"><datalist id="clmModels"></datalist></div>${has && !modelOf(prov) ? `<p class="hint" style="margin-top:0">Tap the Model box and choose one of the models your key can use.</p>` : ""}`
       : prov === "other" ? `<div class="clm-field"><label for="clmName">Name</label><input id="clmName" value="${esc(getf("other", "name"))}" placeholder="Gemini" autocomplete="off"></div>
         <div class="clm-field"><label for="clmBase">Website address</label><input id="clmBase" value="${esc(getf("other", "base"))}" placeholder="https://…/v1" autocomplete="off" inputmode="url"></div>
         <div class="clm-field"><label for="clmModel">Model</label><input id="clmModel" value="${esc(getf("other", "model"))}" placeholder="model name" autocomplete="off"></div>` : "";
@@ -327,7 +332,7 @@ Two things about the editor: its tools make precise changes (text, colors, shape
       <div class="clm-link"><input readonly id="clmLink" value="${esc(link())}" aria-label="Connector link"><button class="btn sm primary" id="clmCopy">Copy</button></div>
       <ol class="clm-steps">
         <li>Turn on <b>Allow ${esc(mn)} to use this tab</b> above, then tap <b>Copy</b>.</li>
-        ${STEPS[mcpAgent].map((t) => `<li>${t}</li>`).join("")}
+        ${(STEPS[mcpAgent] || STEPS.other).map((t) => `<li>${t}</li>`).join("")}
       </ol>
       <p class="hint">Keep this tab open while ${esc(mn)} works: it can only act while Fast Edit is open here. Your files stay in this browser. ${esc(mn)} only gets the small screenshots and replies it asks for.</p>
       <p class="hint"><b>Treat the link like a password.</b> Anyone who has it can edit this tab while it's connected.</p>
@@ -335,12 +340,12 @@ Two things about the editor: its tools make precise changes (text, colors, shape
     $("#clmProv").onchange = (e) => { prov = e.target.value; store.set("fastedit.ai.prov", prov); keyErr = ""; render(); };
     $("#clmAgent").onchange = (e) => { mcpAgent = e.target.value; store.set("fastedit.mcp.agent", mcpAgent); brand(); render(); };
     for (const [id, k] of [["#clmModel", "model"], ["#clmName", "name"], ["#clmBase", "base"]]) { const el = $(id); if (el) el.onchange = () => { setf(prov, k, el.value.trim()); if (active === prov) brand(); }; }
-    if (prov === "chatgpt" && has) loadModels();
+    if (P.base && has) loadModels(prov);
     $("#clmOn").onchange = (e) => setOn(e.target.checked);
     const ks = $("#clmKeySave");
     if (ks) ks.onclick = () => {
       const v = $("#clmKey").value.trim();
-      if (!P.keyOk(v)) { keyErr = prov === "claude" ? "That doesn't look like a Claude API key (it starts with sk-ant-)." : prov === "chatgpt" ? "That doesn't look like an OpenAI API key (it starts with sk-)." : "Paste the API key from that service."; return render(); }
+      if (!P.keyOk(v)) { keyErr = prov === "claude" ? "That doesn't look like a Claude API key (it starts with sk-ant-)." : prov === "chatgpt" ? "That doesn't look like an OpenAI API key (it starts with sk-)." : P.site ? `That doesn't look like a ${n} API key. Copy it again from ${P.site}.` : "Paste the API key from that service."; return render(); }
       if (prov === "other" && (!/^(https:\/\/|http:\/\/localhost)/.test(getf("other", "base")) || !modelOf("other"))) { keyErr = "Fill in the website address (starting with https://) and the model first."; return render(); }
       keyErr = ""; setf(prov, "key", v); active = prov; store.set("fastedit.ai.active", active); hist.photo = []; hist.video = []; brand(); noteAll(`${nameOf(prov)} now answers in this panel`); render();
     };
@@ -352,14 +357,17 @@ Two things about the editor: its tools make precise changes (text, colors, shape
     $("#clmLink").onfocus = (e) => e.target.select();
     $("#clmNew").onclick = () => { if (!confirm("Make a new link? The current one will stop working.")) return; code = newCode(); store.set("fastedit.claude.code", code); store.del("fastedit.claude.seen"); seen = false; lastCall = null; brand(); render(); FE.toast("New link made. Add it in your AI app."); };
   }
-  let modelsFor = "";
-  async function loadModels() { // suggest the models this OpenAI key can use
-    if (modelsFor === keyOf("chatgpt")) return; modelsFor = keyOf("chatgpt");
+  let modelsFor = "", modelIds = {};
+  async function loadModels(p) { // suggest the models this key can use
+    const tag = p + ":" + keyOf(p), fill = () => { const dl = $("#clmModels"); if (dl && modelIds[p]) dl.innerHTML = modelIds[p].map((id) => `<option value="${esc(id)}">`).join(""); };
+    if (modelsFor === tag) return fill(); modelsFor = tag;
     try {
-      const r = await fetch(baseOf("chatgpt") + "/models", { headers: { authorization: "Bearer " + keyOf("chatgpt") } }); if (!r.ok) return;
-      const ids = ((await r.json()).data || []).map((x) => x.id).filter((id) => /^(gpt|o\d|chatgpt)/.test(id) && !/(audio|realtime|transcribe|tts|image|embed|moderation|search|instruct)/.test(id)).sort().reverse().slice(0, 40);
-      const dl = $("#clmModels"); if (dl) dl.innerHTML = ids.map((id) => `<option value="${esc(id)}">`).join("");
-    } catch {}
+      const r = await fetch(baseOf(p) + "/models", { headers: { authorization: "Bearer " + keyOf(p) } }); if (!r.ok) { modelsFor = ""; return; }
+      const bad = /(audio|realtime|transcribe|tts|image|embed|moderation|search|instruct|whisper|guard|rerank|ocr)/;
+      let ids = ((await r.json()).data || []).map((x) => String(x.id).replace(/^models\//, "")).filter((id) => !bad.test(id));
+      if (p === "chatgpt") ids = ids.filter((id) => /^(gpt|o\d|chatgpt)/.test(id)); if (p === "gemini") ids = ids.filter((id) => /^gemini/.test(id));
+      modelIds[p] = ids.sort().reverse().slice(0, 300); fill();
+    } catch { modelsFor = ""; }
   }
   function open() { dlg.hidden = false; render(); }
   function close() { dlg.hidden = true; }

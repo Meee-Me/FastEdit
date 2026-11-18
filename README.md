@@ -112,7 +112,7 @@ Fast Edit doesn't download from Google or take copyrighted songs. Everything com
 
 The **Connect AI** button (it shows the AI's name once connected) works with Claude, ChatGPT and other AI services, in two ways:
 
-- **Chat panel:** paste that service's API key and the panel becomes that AI (Claude via the Anthropic SDK; ChatGPT, Gemini, Groq, OpenRouter, Mistral and anything else that uses OpenAI's chat format via plain `fetch`, with a model that sees images and uses tools). Keys are stored per AI in this browser only.
+- **Chat panel:** paste that service's API key and the panel becomes that AI (Claude via the Anthropic SDK; ChatGPT, Gemini, Groq, OpenRouter and Mistral as ready-made options, plus any other service that uses OpenAI's chat format, via plain `fetch`, with a model that sees images and uses tools). Keys are stored per AI in this browser only.
 - **Private link:** one MCP connector link that any AI app with remote MCP support can use (Claude: Settings → Connectors; ChatGPT: Developer mode connectors).
 
 Whichever way it connects, the AI works as itself. It gets precise tools (`agent-tools.mjs`, run by `agent.js` and `video.js`) and a minimal prompt, so it plans, writes, picks colors and timing, and edits the way it would on its own:
